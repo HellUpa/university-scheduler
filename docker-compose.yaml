@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: scheduler_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/code:Z
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/code
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - scheduler_net
+
+  db:
+    image: postgres:17-alpine
+    container_name: scheduler_db
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:Z
+    networks:
+      - scheduler_net
+
+volumes:
+  postgres_data:
+
+networks:
+  scheduler_net:
+    driver: bridge
