@@ -1,22 +1,26 @@
-FROM python:3.11-slim
+FROM golang:1.25-alpine AS builder
 
-# Переменные окружения для Python
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/code
+RUN apk add --no-cache git
 
-WORKDIR /code
+WORKDIR /app
 
-# Устанавливаем зависимости
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Копируем код приложения
 COPY . .
 
-# Создаем пользователя (security best practice)
-RUN adduser --disabled-password --gecos "" appuser && chown -R appuser /code
-USER appuser
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o scheduler ./cmd/api
 
-# Команда запуска
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+FROM alpine:latest
+
+RUN apk add --no-cache tzdata ca-certificates
+
+WORKDIR /app
+
+# Copy binary
+COPY --from=builder /app/scheduler .
+
+EXPOSE 8080
+
+CMD ["./scheduler"]

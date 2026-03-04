@@ -1,40 +1,52 @@
 services:
-  backend:
-    build: .
-    container_name: scheduler_backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - .:/code:Z
+  # ==========================================
+  # 1. API SERVICE (Основной вход)
+  # ==========================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scheduler-api
+    command: ./scheduler
     ports:
-      - "8000:8000"
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./env/config.yaml:/etc/scheduler/config.yaml
     environment:
-      - PYTHONPATH=/code
-      - POSTGRES_SERVER=db
+      - CONFIG_PATH=/etc/scheduler
     env_file:
       - .env
-    depends_on:
-      - db
     networks:
-      - scheduler_net
+      - scheduler-network
 
+  # ==========================================
+  # ИНФРАСТРУКТУРА
+  # ==========================================
   db:
     image: postgres:17-alpine
-    container_name: scheduler_db
-    restart: always
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+    container_name: scheduler-postgres
     ports:
       - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ucttp
     volumes:
-      - postgres_data:/var/lib/postgresql/data:Z
+      - scheduler-postgres:/var/lib/postgresql/data
     networks:
-      - scheduler_net
-
-volumes:
-  postgres_data:
+      - scheduler-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 networks:
-  scheduler_net:
+  scheduler-network:
     driver: bridge
+
+volumes:
+  scheduler-postgres:

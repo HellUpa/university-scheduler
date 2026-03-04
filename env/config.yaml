@@ -1,0 +1,7 @@
+postgres:
+  server: db
+  port: 5432
+  user: postgres
+  password: postgres
+  db: ucttp
+server_port: 8080
