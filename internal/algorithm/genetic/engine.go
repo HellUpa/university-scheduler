@@ -5,7 +5,6 @@ import (
 	"scheduler/internal/domain"
 	"sort"
 	"sync"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -17,10 +16,13 @@ type GeneticEngine struct {
 	MutationRate   float64
 
 	// Контекст
-	Classes   []domain.CourseClass
-	RoomIDs   []uint
-	SlotIDs   []uint
-	Evaluator *Evaluator
+	Classes []domain.CourseClass
+	RoomIDs []uint
+	SlotIDs []uint
+
+	// Кэши для быстрого поиска O(1) по ID
+	ClassesMap map[uint]*domain.CourseClass
+	Evaluator  *Evaluator
 }
 
 func NewEngine(db *gorm.DB) *GeneticEngine {
@@ -33,9 +35,20 @@ func NewEngine(db *gorm.DB) *GeneticEngine {
 }
 
 func (eng *GeneticEngine) Prepare() error {
-	// Загрузка данных (Preload для связей)
-	if err := eng.DB.Preload("Groups").Find(&eng.Classes).Error; err != nil {
+	// ВАЖНО: Добавили Preload для Subject и Instructor
+	err := eng.DB.
+		Preload("Groups").
+		Preload("Subject").    // <--- ДОБАВИЛИ
+		Preload("Instructor"). // <--- ДОБАВИЛИ
+		Find(&eng.Classes).Error
+	if err != nil {
 		return err
+	}
+
+	// Инициализируем наш кэш классов
+	eng.ClassesMap = make(map[uint]*domain.CourseClass)
+	for i := range eng.Classes {
+		eng.ClassesMap[eng.Classes[i].ID] = &eng.Classes[i]
 	}
 
 	var rooms []domain.Room
@@ -50,7 +63,6 @@ func (eng *GeneticEngine) Prepare() error {
 
 	eng.Evaluator = NewEvaluator(rooms, slots)
 
-	// Кэшируем ID для рандома
 	for _, r := range rooms {
 		eng.RoomIDs = append(eng.RoomIDs, r.ID)
 	}
@@ -58,7 +70,6 @@ func (eng *GeneticEngine) Prepare() error {
 		eng.SlotIDs = append(eng.SlotIDs, s.ID)
 	}
 
-	rand.Seed(time.Now().UnixNano())
 	return nil
 }
 

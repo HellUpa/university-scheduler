@@ -73,24 +73,13 @@ func (h *Handler) GenerateSchedule(c *fiber.Ctx) error {
 	result := make([]ScheduleItemResponse, len(bestIndividual.Genes))
 
 	for i, gene := range bestIndividual.Genes {
-		// Достаем названия из кэшированных мап в Evaluator'е и массиве Classes
 		room := engine.Evaluator.RoomsMap[gene.RoomID]
 		slot := engine.Evaluator.SlotsMap[gene.SlotID]
-
-		// Находим предмет и препода (в реальном проекте можно тоже закэшировать в мапу,
-		// но пока просто найдем перебором, их мало)
-		var subjectName, instructorName string
-		for _, cls := range engine.Classes {
-			if cls.ID == gene.ClassID {
-				subjectName = cls.Subject.Name
-				instructorName = cls.Instructor.Name
-				break
-			}
-		}
+		cls := engine.ClassesMap[gene.ClassID]
 
 		result[i] = ScheduleItemResponse{
-			Subject:    subjectName,
-			Instructor: instructorName,
+			Subject:    cls.Subject.Name,
+			Instructor: cls.Instructor.Name,
 			Room:       room.Name,
 			Day:        string(slot.Day),
 			Time:       fmt.Sprintf("%s - %s", slot.StartTime, slot.EndTime),
