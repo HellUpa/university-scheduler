@@ -39,8 +39,8 @@ type ScheduleItemResponse struct {
 func (h *Handler) GenerateSchedule(c *fiber.Ctx) error {
 	// 1. Читаем параметры по умолчанию
 	req := GenerateRequest{
-		PopulationSize: 100,
-		Generations:    50,
+		PopulationSize: 200,
+		Generations:    200,
 		MutationRate:   0.05,
 	}
 
