@@ -84,10 +84,12 @@ func (eng *GeneticEngine) Run() (*Individual, error) {
 		population[i] = eng.createRandomIndividual()
 	}
 
-	// === Переменные для Адаптивной Мутации ===
-	currentMutationRate := eng.MutationRate
 	bestFitnessOverall := 0.0
 	stagnantGenerations := 0
+
+	// Переменные для импульсной мутации
+	shockMode := false   // Флаг "Режим удара"
+	recoveryCounter := 0 // Счетчик поколений восстановления (иммунитет)
 	// =========================================
 
 	for gen := 0; gen < eng.Generations; gen++ {
@@ -109,24 +111,35 @@ func (eng *GeneticEngine) Run() (*Individual, error) {
 
 		bestInd := population[0]
 
-		// === ЛОГИКА АДАПТИВНОЙ МУТАЦИИ ===
-		// Округляем для сравнения, чтобы игнорировать микро-колебания
-		if bestInd.Fitness > bestFitnessOverall+0.001 {
-			bestFitnessOverall = bestInd.Fitness
-			stagnantGenerations = 0
-			currentMutationRate = eng.MutationRate // Сбрасываем до базовой
+		// === ЛОГИКА "УДАР И ВОССТАНОВЛЕНИЕ" ===
+
+		// Если мы в фазе восстановления - просто уменьшаем счетчик и ничего не делаем
+		if recoveryCounter > 0 {
+			recoveryCounter--
+			stagnantGenerations = 0 // Сбрасываем стагнацию, пока восстанавливаемся
 		} else {
-			stagnantGenerations++
+			// Обычный режим: проверяем стагнацию
+			if bestInd.Fitness > bestFitnessOverall+0.001 {
+				bestFitnessOverall = bestInd.Fitness
+				stagnantGenerations = 0
+			} else {
+				stagnantGenerations++
+			}
+
+			// Если застряли на 15 поколений -> Готовим УДАР
+			if stagnantGenerations >= 15 {
+				shockMode = true
+				stagnantGenerations = 0 // Сброс
+				recoveryCounter = 20    // Даем 20 поколений на восстановление после удара
+				log.Printf("[Gen %d] !!! STAGNATION DETECTED -> SHOCK THERAPY !!!", gen)
+			}
 		}
 
-		// Если мы застряли больше чем на 10 поколений, устраиваем "встряску"
-		if stagnantGenerations > 10 {
-			currentMutationRate *= 1.5 // Увеличиваем мутацию на 50%
-
-			// Ограничиваем сверху, чтобы не превратить всё в полный хаос (max 30%)
-			if currentMutationRate > 0.3 {
-				currentMutationRate = 0.3
-			}
+		// Определяем текущую мутацию
+		currentMutationRate := eng.MutationRate
+		if shockMode {
+			currentMutationRate = 0.5 // Взрываем 50% генов!
+			shockMode = false         // Удар длится всего 1 поколение
 		}
 		// =========================================
 
@@ -146,6 +159,9 @@ func (eng *GeneticEngine) Run() (*Individual, error) {
 		// 3. Селекция и Скрещивание
 		newPop := make([]*Individual, 0, eng.PopulationSize)
 		eliteCount := int(float64(eng.PopulationSize) * 0.1)
+		if currentMutationRate > 0.4 {
+			eliteCount = 1 // При шоке оставляем только самого лучшего, остальных в топку
+		}
 		newPop = append(newPop, population[:eliteCount]...)
 
 		for len(newPop) < eng.PopulationSize {
@@ -153,10 +169,7 @@ func (eng *GeneticEngine) Run() (*Individual, error) {
 			p2 := population[rand.Intn(len(population)/2)]
 
 			child := eng.crossover(p1, p2)
-
-			// Передаем ТЕКУЩИЙ (возможно повышенный) шанс мутации
-			eng.mutate(child, currentMutationRate)
-
+			eng.mutate(child, currentMutationRate) // Применяем обычную или шоковую мутацию
 			newPop = append(newPop, child)
 		}
 		population = newPop

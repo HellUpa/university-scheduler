@@ -2,6 +2,7 @@ package transport
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -32,7 +33,7 @@ type ScheduleItemResponse struct {
 	Room       string `json:"room"`
 	Day        string `json:"day"`
 	Time       string `json:"time"`
-	Groups     string `json:"groups,omitempty"` // На будущее
+	Groups     string `json:"groups"`
 }
 
 func (h *Handler) GenerateSchedule(c *fiber.Ctx) error {
@@ -77,12 +78,19 @@ func (h *Handler) GenerateSchedule(c *fiber.Ctx) error {
 		slot := engine.Evaluator.SlotsMap[gene.SlotID]
 		cls := engine.ClassesMap[gene.ClassID]
 
+		var groupNames []string
+		for _, g := range cls.Groups {
+			groupNames = append(groupNames, g.Name)
+		}
+		groupsStr := strings.Join(groupNames, ", ")
+
 		result[i] = ScheduleItemResponse{
 			Subject:    cls.Subject.Name,
 			Instructor: cls.Instructor.Name,
 			Room:       room.Name,
 			Day:        string(slot.Day),
 			Time:       fmt.Sprintf("%s - %s", slot.StartTime, slot.EndTime),
+			Groups:     groupsStr,
 		}
 	}
 

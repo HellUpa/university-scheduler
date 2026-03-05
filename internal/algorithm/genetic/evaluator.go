@@ -3,21 +3,22 @@ package genetic
 import (
 	"math"
 	"scheduler/internal/domain"
+	"sort"
 )
 
 const (
-	// Hard Constraints (Жесткие штрафы - должны быть огромными)
-	PenaltyRoomConflict       = -10000.0
-	PenaltyInstructorConflict = -10000.0
-	PenaltyGroupConflict      = -10000.0
-	PenaltyCapacityOverflow   = -5000.0
+	// SOFT CONSTRAINTS & BONUSES (Перебалансировано)
+	// Штрафы за дискомфорт
+	PenaltyGap           = -20.0 // Штраф за окно сделали меньше
+	PenaltyWrongRoomType = -10.0 // Неправильный тип аудитории
 
-	// Soft Constraints & Bonuses (Фишечки)
-	PenaltyWrongRoomType = -50.0 // Например, лекция в лабе
-	BonusPerfectRoomType = +20.0 // Предмет в идеальной аудитории
+	// Бонусы за идеальные условия
+	BonusPerfectRoomType = +5.0  // Бонус за аудиторию тоже стал меньше
+	BonusDayWithoutGaps  = +50.0 // БОНУС за идеальный день без окон!
 
-	// Коэффициент сглаживания сигмоиды (чтобы график не был слишком резким)
-	SigmoidScale = 0.01
+	// Коэффициенты для итогового фитнеса
+	SigmoidScaleFactor = 0.01 // Коэффициент сглаживания сигмоиды
+	SoftScoreWeight    = 0.5  // Вес "бонусной" части в итоговом фитнесе
 )
 
 type Evaluator struct {
@@ -46,20 +47,23 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 
 // CalculateFitness вычисляет приспособленность через Сигмоиду
 func (e *Evaluator) CalculateFitness(ind *Individual) float64 {
-	hardConflicts := 0 // Счетчик жестких накладок
-	softScore := 0.0   // Баллы за "фишечки"
+	hardConflicts := 0
+	softScore := 0.0
 
+	// Карты коллизий (как раньше)
 	roomUsage := make(map[struct{ S, R uint }]bool)
 	instructorUsage := make(map[struct{ S, I uint }]bool)
 	groupUsage := make(map[struct{ S, G uint }]bool)
 
+	// Map[GroupID][DayOfWeek] -> Slice of PeriodNumbers
+	groupDailySchedule := make(map[uint]map[domain.DayOfWeek][]int)
+
 	for _, gene := range ind.Genes {
 		room := e.RoomsMap[gene.RoomID]
+		slot := e.SlotsMap[gene.SlotID]
 		cls := e.ClassesMap[gene.ClassID]
 
-		// ==========================================
-		// 1. HARD CONSTRAINTS (Жесткие ограничения)
-		// ==========================================
+		// --- 1. HARD CHECKS---
 		if room.Capacity < gene.StudentsCount {
 			hardConflicts++
 		}
@@ -82,39 +86,64 @@ func (e *Evaluator) CalculateFitness(ind *Individual) float64 {
 				hardConflicts++
 			}
 			groupUsage[grpKey] = true
+
+			// --- СБОР ДАННЫХ ДЛЯ ОКОН ---
+			// Инициализируем мапу, если нет
+			if groupDailySchedule[gid] == nil {
+				groupDailySchedule[gid] = make(map[domain.DayOfWeek][]int)
+			}
+			// Записываем, что у группы gid в этот день занят слот period
+			groupDailySchedule[gid][slot.Day] = append(groupDailySchedule[gid][slot.Day], slot.PeriodNumber)
 		}
 
-		// ==========================================
-		// 2. SOFT CONSTRAINTS (Бонусы и мелкие штрафы)
-		// ==========================================
+		// --- 2. SOFT CHECKS (Тип аудитории) ---
 		if room.Type == cls.RequiredRoomType {
-			softScore += 1.0 // Бонус за правильный тип аудитории
+			softScore += BonusPerfectRoomType
 		} else {
-			softScore -= 1.0 // Штраф за дискомфорт
+			softScore += PenaltyWrongRoomType
 		}
 	}
 
-	// ==========================================
-	// 3. МАТЕМАТИКА ФИТНЕСА
-	// ==========================================
+	// --- 3. АНАЛИЗ ОКОН (GAPS ANALYSIS) ---
+	for _, daysMap := range groupDailySchedule {
+		for _, periods := range daysMap {
+			if len(periods) < 2 {
+				continue
+			}
+			sort.Ints(periods)
 
-	// Базовый фитнес за отсутствие коллизий (от 0.0 до 1.0)
-	// Если hardConflicts = 0, baseFitness = 1.0
-	// Если hardConflicts = 1, baseFitness = 0.5
-	// Если hardConflicts = 9, baseFitness = 0.1
+			hasGaps := false
+			for i := 1; i < len(periods); i++ {
+				diff := periods[i] - periods[i-1]
+				if diff > 1 {
+					gapsCount := diff - 1
+					softScore += float64(gapsCount) * PenaltyGap
+					hasGaps = true
+				}
+			}
+
+			// !!! Если в этом дне НЕ было окон, даем СУПЕР-БОНУС !!!
+			if !hasGaps {
+				softScore += BonusDayWithoutGaps
+			}
+		}
+	}
+
+	// --- 4. ИТОГОВЫЙ РАСЧЕТ ---
 	baseFitness := 1.0 / (1.0 + float64(hardConflicts))
 
-	// Сигмоида для мягких бонусов (от 0.0 до 1.0)
-	// softScore может быть отрицательным или положительным
-	softSigmoid := 1.0 / (1.0 + math.Exp(-0.1*softScore))
+	// Если есть жесткие конфликты, бонусы нас не интересуют.
+	// Это помогает алгоритму на ранних стадиях сосредоточиться на главном.
+	if baseFitness < 1.0 {
+		ind.Fitness = baseFitness
+		return baseFitness
+	}
 
-	// Объединяем. Вес бонусов делаем маленьким (например, 0.1),
-	// чтобы они работали как "усилитель вкуса", но не могли перебить коллизию.
-	// Максимальный фитнес теперь может быть 1.1!
-	totalFitness := baseFitness + (softSigmoid * 0.1)
+	softSigmoid := 1.0 / (1.0 + math.Exp(-SigmoidScaleFactor*softScore))
 
-	// Сохраняем в объект (чтобы мы могли выводить это в логи)
+	// Итоговый фитнес = 1.0 (за отсутствие коллизий) + до 0.5 очков за бонусы
+	totalFitness := baseFitness + (softSigmoid * SoftScoreWeight)
+
 	ind.Fitness = totalFitness
-
 	return totalFitness
 }
