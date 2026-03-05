@@ -35,6 +35,7 @@ type Room struct {
 	Name     string `gorm:"uniqueIndex"`
 	Capacity int
 	Type     RoomType `gorm:"type:varchar(20)"`
+	Floor    int
 }
 
 type Instructor struct {
@@ -53,8 +54,15 @@ type Group struct {
 }
 
 type Subject struct {
-	ID      uint `gorm:"primaryKey"`
-	Name    string
+	ID   uint `gorm:"primaryKey"`
+	Name string
+
+	// Система кредитов (учебный план)
+	Credits       int // Количество зачетных единиц (например, 5)
+	LectureHours  int // Сколько часов лекций в неделю (например, 2)
+	PracticeHours int // Сколько часов практики в неделю (например, 4)
+	LabHours      int // Сколько часов лабораторных (например, 0)
+
 	Classes []CourseClass `gorm:"foreignKey:SubjectID"`
 }
 
@@ -70,5 +78,5 @@ type CourseClass struct {
 
 	IsLecture        bool
 	RequiredRoomType RoomType `gorm:"type:varchar(20)"`
-	Duration         int      // Количество слотов
+	Duration         int      // Количество временных слотов
 }

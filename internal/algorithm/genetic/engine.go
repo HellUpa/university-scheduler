@@ -1,6 +1,7 @@
 package genetic
 
 import (
+	"log"
 	"math/rand"
 	"scheduler/internal/domain"
 	"sort"
@@ -61,7 +62,7 @@ func (eng *GeneticEngine) Prepare() error {
 		return err
 	}
 
-	eng.Evaluator = NewEvaluator(rooms, slots)
+	eng.Evaluator = NewEvaluator(rooms, slots, eng.Classes)
 
 	for _, r := range rooms {
 		eng.RoomIDs = append(eng.RoomIDs, r.ID)
@@ -78,62 +79,91 @@ func (eng *GeneticEngine) Run() (*Individual, error) {
 		return nil, err
 	}
 
-	// 1. Инициализация
 	population := make([]*Individual, eng.PopulationSize)
 	for i := 0; i < eng.PopulationSize; i++ {
 		population[i] = eng.createRandomIndividual()
 	}
 
-	// 2. Эволюция
-	for gen := 0; gen < eng.Generations; gen++ {
+	// === Переменные для Адаптивной Мутации ===
+	currentMutationRate := eng.MutationRate
+	bestFitnessOverall := 0.0
+	stagnantGenerations := 0
+	// =========================================
 
-		// --- ПАРАЛЛЕЛЬНАЯ ОЦЕНКА (Concurrent Evaluation) ---
+	for gen := 0; gen < eng.Generations; gen++ {
+		// 1. Оценка популяции (Параллельно)
 		var wg sync.WaitGroup
 		wg.Add(len(population))
-
 		for _, ind := range population {
 			go func(individual *Individual) {
 				defer wg.Done()
-				individual.Fitness = eng.Evaluator.CalculateFitness(individual)
+				eng.Evaluator.CalculateFitness(individual)
 			}(ind)
 		}
 		wg.Wait()
-		// ----------------------------------------------------
 
-		// Сортировка
+		// 2. Сортировка
 		sort.Slice(population, func(i, j int) bool {
 			return population[i].Fitness > population[j].Fitness
 		})
 
-		bestFit := population[0].Fitness
-		// Логгируем, но не каждое поколение, чтоб не засорять консоль
-		if gen%10 == 0 || bestFit > 0.99 {
-			// fmt.Printf("Gen %d: Best Fitness = %.4f\n", gen, bestFit)
+		bestInd := population[0]
+
+		// === ЛОГИКА АДАПТИВНОЙ МУТАЦИИ ===
+		// Округляем для сравнения, чтобы игнорировать микро-колебания
+		if bestInd.Fitness > bestFitnessOverall+0.001 {
+			bestFitnessOverall = bestInd.Fitness
+			stagnantGenerations = 0
+			currentMutationRate = eng.MutationRate // Сбрасываем до базовой
+		} else {
+			stagnantGenerations++
 		}
 
-		if bestFit > 0.999 {
+		// Если мы застряли больше чем на 10 поколений, устраиваем "встряску"
+		if stagnantGenerations > 10 {
+			currentMutationRate *= 1.5 // Увеличиваем мутацию на 50%
+
+			// Ограничиваем сверху, чтобы не превратить всё в полный хаос (max 30%)
+			if currentMutationRate > 0.3 {
+				currentMutationRate = 0.3
+			}
+		}
+		// =========================================
+
+		// Логирование прогресса
+		if gen%20 == 0 || gen == eng.Generations-1 {
+			log.Printf("[Gen %3d] Best Fit: %.4f | Stag: %2d | MutRate: %.3f",
+				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
+		}
+
+		// Выход, если нашли расписание без коллизий и с максимумом бонусов
+		// 1.0 = нет коллизий. 1.09+ = отличные бонусы.
+		if bestInd.Fitness > 1.09 {
+			log.Printf("Optimal solution found at generation %d!", gen)
 			break
 		}
 
-		// Селекция и скрещивание
+		// 3. Селекция и Скрещивание
 		newPop := make([]*Individual, 0, eng.PopulationSize)
-
-		// Элитаризм (10%)
 		eliteCount := int(float64(eng.PopulationSize) * 0.1)
 		newPop = append(newPop, population[:eliteCount]...)
 
-		// Добираем остальных
 		for len(newPop) < eng.PopulationSize {
-			p1 := population[rand.Intn(len(population)/2)] // Из лучшей половины
+			p1 := population[rand.Intn(len(population)/2)]
 			p2 := population[rand.Intn(len(population)/2)]
 
 			child := eng.crossover(p1, p2)
-			eng.mutate(child)
+
+			// Передаем ТЕКУЩИЙ (возможно повышенный) шанс мутации
+			eng.mutate(child, currentMutationRate)
+
 			newPop = append(newPop, child)
 		}
 		population = newPop
 	}
 
+	// Финальная переоценка первого (чтобы точно вернуть свежий Фитнес)
+	eng.Evaluator.CalculateFitness(population[0])
 	return population[0], nil
 }
 
@@ -196,11 +226,10 @@ func (eng *GeneticEngine) crossover(p1, p2 *Individual) *Individual {
 	return NewIndividual(childGenes)
 }
 
-// mutate случайным образом изменяет гены
-func (eng *GeneticEngine) mutate(ind *Individual) {
+// mutate случайным образом изменяет гены с заданным шансом (rate)
+func (eng *GeneticEngine) mutate(ind *Individual, rate float64) {
 	for _, gene := range ind.Genes {
-		if rand.Float64() < eng.MutationRate {
-			// С вероятностью 50% меняем либо слот, либо аудиторию
+		if rand.Float64() < rate {
 			if rand.Float64() < 0.5 {
 				gene.SlotID = eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
 			} else {

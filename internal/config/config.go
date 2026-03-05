@@ -10,8 +10,9 @@ import (
 )
 
 type Config struct {
-	Postgres   PostgresConfig `mapstructure:"postgres"`
-	ServerPort string         `mapstructure:"server_port"`
+	Postgres    PostgresConfig `mapstructure:"postgres"`
+	ServerPort  string         `mapstructure:"server_port"`
+	StartSeeder bool           `mapstructure:"start_seeder"`
 }
 
 type PostgresConfig struct {

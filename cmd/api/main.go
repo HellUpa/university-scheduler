@@ -23,8 +23,9 @@ func main() {
 	db := database.NewConnection(cfg.GetDSN())
 	log.Println("Database connected and migrated successfully")
 
-	// TODO: Временно! Для тестирования мы можем вызвать функцию Seeder'а здесь
-	database.Seed(db)
+	if cfg.StartSeeder {
+		database.Seed(db)
+	}
 
 	// 3. Инициализация Fiber
 	app := fiber.New(fiber.Config{

@@ -5,3 +5,4 @@ postgres:
   password: postgres
   db: ucttp
 server_port: 8080
+start_seeder: true
