@@ -1,12 +1,12 @@
 package genetic
 
 import (
-	"log"
 	"math/rand"
 	"scheduler/internal/algorithm"
 	"scheduler/internal/domain"
 	"sort"
 	"sync"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -75,51 +75,77 @@ func (eng *GeneticEngine) Prepare() error {
 	return nil
 }
 
-func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
+// Run оркестрирует параллельный запуск (Островная модель)
+func (eng *GeneticEngine) Run(instances int) (*algorithm.Schedule, error) {
+	// Подготовка данных (Обращение к БД) делается ОДИН раз для всех!
 	if err := eng.Prepare(); err != nil {
 		return nil, err
 	}
 
+	var wg sync.WaitGroup
+	results := make(chan *algorithm.Schedule, instances)
+
+	// Запускаем N независимых эволюций параллельно
+	for i := 0; i < instances; i++ {
+		wg.Add(1)
+		go func(instanceID int) {
+			defer wg.Done()
+			seed := time.Now().UnixNano() + int64(instanceID*1000)
+			localRand := rand.New(rand.NewSource(seed))
+
+			// Передаем генератор внутрь инстанса
+			best := eng.runInstance(localRand)
+			results <- best
+		}(i)
+	}
+
+	// Ждем, пока все острова закончат эволюцию
+	wg.Wait()
+	close(results)
+
+	// Выбираем глобального победителя
+	var globalBest *algorithm.Schedule
+	for best := range results {
+		if globalBest == nil || best.Fitness > globalBest.Fitness {
+			globalBest = best
+		}
+	}
+
+	return globalBest, nil
+}
+
+// runInstance - логика одной изолированной популяции (одного "острова")
+func (eng *GeneticEngine) runInstance(rng *rand.Rand) *algorithm.Schedule {
 	population := make([]*algorithm.Schedule, eng.PopulationSize)
 	for i := 0; i < eng.PopulationSize; i++ {
-		population[i] = eng.createRandomIndividual()
+		// Передаем локальный генератор
+		population[i] = eng.createRandomIndividual(rng)
 	}
 
 	bestFitnessOverall := 0.0
 	stagnantGenerations := 0
-
-	// Переменные для импульсной мутации
-	shockMode := false   // Флаг "Режим удара"
-	recoveryCounter := 0 // Счетчик поколений восстановления (иммунитет)
-	// =========================================
+	shockMode := false
+	recoveryCounter := 0
 
 	for gen := 0; gen < eng.Generations; gen++ {
-		// 1. Оценка популяции (Параллельно)
-		var wg sync.WaitGroup
-		wg.Add(len(population))
 		for _, ind := range population {
-			go func(individual *algorithm.Schedule) {
-				defer wg.Done()
-				eng.Evaluator.CalculateFitness(individual)
-			}(ind)
+			eng.Evaluator.CalculateFitness(ind)
 		}
-		wg.Wait()
 
-		// 2. Сортировка
 		sort.Slice(population, func(i, j int) bool {
 			return population[i].Fitness > population[j].Fitness
 		})
 
 		bestInd := population[0]
 
-		// === ЛОГИКА "УДАР И ВОССТАНОВЛЕНИЕ" ===
+		if bestInd.Fitness > 1.2 {
+			break
+		}
 
-		// Если мы в фазе восстановления - просто уменьшаем счетчик и ничего не делаем
 		if recoveryCounter > 0 {
 			recoveryCounter--
-			stagnantGenerations = 0 // Сбрасываем стагнацию, пока восстанавливаемся
+			stagnantGenerations = 0
 		} else {
-			// Обычный режим: проверяем стагнацию
 			if bestInd.Fitness > bestFitnessOverall+0.001 {
 				bestFitnessOverall = bestInd.Fitness
 				stagnantGenerations = 0
@@ -127,72 +153,53 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 				stagnantGenerations++
 			}
 
-			// Если застряли на 15 поколений -> Готовим УДАР
 			if stagnantGenerations >= 15 {
 				shockMode = true
-				stagnantGenerations = 0 // Сброс
-				recoveryCounter = 20    // Даем 20 поколений на восстановление после удара
-				log.Printf("[Gen %d] !!! STAGNATION DETECTED -> SHOCK THERAPY !!!", gen)
+				stagnantGenerations = 0
+				recoveryCounter = 20
 			}
 		}
 
-		// Определяем текущую мутацию
 		currentMutationRate := eng.MutationRate
 		if shockMode {
-			currentMutationRate = 0.5 // Взрываем 50% генов!
-			shockMode = false         // Удар длится всего 1 поколение
-		}
-		// =========================================
-
-		// Логирование прогресса
-		if gen%20 == 0 || gen == eng.Generations-1 {
-			log.Printf("[Gen %3d] Best Fit: %.4f | Stag: %2d | MutRate: %.3f",
-				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
+			currentMutationRate = 0.5
+			shockMode = false
 		}
 
-		// Выход, если нашли расписание без коллизий и с максимумом бонусов
-		// 1.0 = нет коллизий. 1.09+ = отличные бонусы.
-		if bestInd.Fitness > 1.09 {
-			log.Printf("Optimal solution found at generation %d!", gen)
-			break
-		}
-
-		// 3. Селекция и Скрещивание
 		newPop := make([]*algorithm.Schedule, 0, eng.PopulationSize)
+
 		eliteCount := int(float64(eng.PopulationSize) * 0.1)
 		if currentMutationRate > 0.4 {
-			eliteCount = 1 // При шоке оставляем только самого лучшего, остальных в топку
+			eliteCount = 1
 		}
 		newPop = append(newPop, population[:eliteCount]...)
 
 		for len(newPop) < eng.PopulationSize {
-			p1 := population[rand.Intn(len(population)/2)]
-			p2 := population[rand.Intn(len(population)/2)]
+			// Используем rng.Intn вместо rand.Intn
+			p1 := population[rng.Intn(len(population)/2)]
+			p2 := population[rng.Intn(len(population)/2)]
 
-			child := eng.crossover(p1, p2)
-			eng.mutate(child, currentMutationRate) // Применяем обычную или шоковую мутацию
+			child := eng.crossover(p1, p2, rng)         // Передаем rng в кроссовер
+			eng.mutate(child, currentMutationRate, rng) // Передаем rng в мутацию
 			newPop = append(newPop, child)
 		}
 		population = newPop
 	}
 
-	// Финальная переоценка первого (чтобы точно вернуть свежий Фитнес)
 	eng.Evaluator.CalculateFitness(population[0])
-	return population[0], nil
+	return population[0]
 }
 
-// Вспомогательные методы (crossover, mutate, createRandomIndividual)
+// === ОБНОВЛЯЕМ ФУНКЦИИ ГЕНЕТИКИ ===
 
-// createRandomIndividual создает случайную хромосому
-func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
-	genes := make([]*algorithm.Assignment, len(eng.Classes))
+func (eng *GeneticEngine) createRandomIndividual(rng *rand.Rand) *algorithm.Schedule {
+	assignments := make([]*algorithm.Assignment, len(eng.Classes))
 
 	for i, cls := range eng.Classes {
-		// Случайная аудитория и слот
-		rndRoom := eng.RoomIDs[rand.Intn(len(eng.RoomIDs))]
-		rndSlot := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+		// Используем rng вместо rand
+		rndRoom := eng.RoomIDs[rng.Intn(len(eng.RoomIDs))]
+		rndSlot := eng.SlotIDs[rng.Intn(len(eng.SlotIDs))]
 
-		// Собираем данные по группам
 		var groupIDs []uint
 		studentsCount := 0
 		for _, g := range cls.Groups {
@@ -200,7 +207,7 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 			studentsCount += g.Size
 		}
 
-		genes[i] = &algorithm.Assignment{
+		assignments[i] = &algorithm.Assignment{
 			ClassID:       cls.ID,
 			RoomID:        rndRoom,
 			SlotID:        rndSlot,
@@ -209,45 +216,40 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 			StudentsCount: studentsCount,
 		}
 	}
-
-	return algorithm.NewSchedule(genes)
+	return algorithm.NewSchedule(assignments)
 }
 
-// crossover выполняет одноточечное скрещивание
-func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule) *algorithm.Schedule {
-	point := rand.Intn(len(p1.Assignments))
-	childGenes := make([]*algorithm.Assignment, len(p1.Assignments))
+func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule, rng *rand.Rand) *algorithm.Schedule {
+	point := rng.Intn(len(p1.Assignments)) // Используем rng
+	childAssigns := make([]*algorithm.Assignment, len(p1.Assignments))
 
 	for i := 0; i < len(p1.Assignments); i++ {
-		var parentGene *algorithm.Assignment
+		var parentAssign *algorithm.Assignment
 		if i < point {
-			parentGene = p1.Assignments[i]
+			parentAssign = p1.Assignments[i]
 		} else {
-			parentGene = p2.Assignments[i]
+			parentAssign = p2.Assignments[i]
 		}
 
-		// ГЛУБОКОЕ КОПИРОВАНИЕ (Deep Copy), чтобы мутация не затрагивала родителей
-		childGenes[i] = &algorithm.Assignment{
-			ClassID:       parentGene.ClassID,
-			RoomID:        parentGene.RoomID,
-			SlotID:        parentGene.SlotID,
-			InstructorID:  parentGene.InstructorID,
-			GroupIDs:      append([]uint(nil), parentGene.GroupIDs...), // Копия среза
-			StudentsCount: parentGene.StudentsCount,
+		childAssigns[i] = &algorithm.Assignment{
+			ClassID:       parentAssign.ClassID,
+			RoomID:        parentAssign.RoomID,
+			SlotID:        parentAssign.SlotID,
+			InstructorID:  parentAssign.InstructorID,
+			GroupIDs:      append([]uint(nil), parentAssign.GroupIDs...),
+			StudentsCount: parentAssign.StudentsCount,
 		}
 	}
-
-	return algorithm.NewSchedule(childGenes)
+	return algorithm.NewSchedule(childAssigns)
 }
 
-// mutate случайным образом изменяет гены с заданным шансом (rate)
-func (eng *GeneticEngine) mutate(ind *algorithm.Schedule, rate float64) {
-	for _, gene := range ind.Assignments {
-		if rand.Float64() < rate {
-			if rand.Float64() < 0.5 {
-				gene.SlotID = eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+func (eng *GeneticEngine) mutate(schedule *algorithm.Schedule, rate float64, rng *rand.Rand) {
+	for _, assignment := range schedule.Assignments {
+		if rng.Float64() < rate { // Используем rng
+			if rng.Float64() < 0.5 {
+				assignment.SlotID = eng.SlotIDs[rng.Intn(len(eng.SlotIDs))]
 			} else {
-				gene.RoomID = eng.RoomIDs[rand.Intn(len(eng.RoomIDs))]
+				assignment.RoomID = eng.RoomIDs[rng.Intn(len(eng.RoomIDs))]
 			}
 		}
 	}

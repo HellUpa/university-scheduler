@@ -25,6 +25,7 @@ type GenerateRequest struct {
 	PopulationSize int     `json:"population_size"`
 	Generations    int     `json:"generations"`
 	MutationRate   float64 `json:"mutation_rate"`
+	Instances      int     `json:"instances"`
 }
 
 // Структура для красивого ответа
@@ -46,6 +47,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 		PopulationSize: 200,
 		Generations:    200,
 		MutationRate:   0.05,
+		Instances:      20,
 	}
 
 	if err := c.BodyParser(&req); err != nil && len(c.Body()) > 0 {
@@ -59,7 +61,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	engine.MutationRate = req.MutationRate
 
 	startTime := time.Now()
-	bestSchedule, err := engine.Run()
+	bestSchedule, err := engine.Run(req.Instances)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}

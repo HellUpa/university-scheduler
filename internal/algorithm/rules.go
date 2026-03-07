@@ -18,11 +18,11 @@ type EvaluatorConfig struct {
 
 // DefaultConfig - настройки по умолчанию
 var DefaultConfig = EvaluatorConfig{
-	PenaltyGap:           -20.0,
-	PenaltyWrongRoomType: -10.0,
+	PenaltyGap:           -40.0,
+	PenaltyWrongRoomType: -20.0,
 	BonusPerfectRoomType: +5.0,
-	BonusDayWithoutGaps:  +50.0,
-	SigmoidScaleFactor:   0.01,
+	BonusDayWithoutGaps:  +100.0,
+	SigmoidScaleFactor:   0.005,
 	SoftScoreWeight:      0.5,
 }
 

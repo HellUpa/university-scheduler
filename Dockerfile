@@ -20,8 +20,6 @@ WORKDIR /app
 
 # Copy binary
 COPY --from=builder /app/scheduler .
-# Copy HTML templates
-COPY --from=builder /app/views ./views
 
 EXPOSE 8080
 
