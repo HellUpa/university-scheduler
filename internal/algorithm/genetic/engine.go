@@ -130,8 +130,11 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 			// Если застряли на 15 поколений -> Готовим УДАР
 			if stagnantGenerations >= 15 {
 				shockMode = true
-				stagnantGenerations = 0 // Сброс
-				recoveryCounter = 20    // Даем 20 поколений на восстановление после удара
+				stagnantGenerations = 0                                // Сброс
+				recoveryCounter = int(float64(eng.Generations) * 0.05) // Даем время восстановиться, 5% от общего числа поколений, если больше 20
+				if recoveryCounter < 20 {
+					recoveryCounter = 20
+				}
 				log.Printf("[Gen %d] !!! STAGNATION DETECTED -> SHOCK THERAPY !!!", gen)
 			}
 		}
@@ -213,31 +216,29 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 	return algorithm.NewSchedule(genes)
 }
 
-// crossover выполняет одноточечное скрещивание
 func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule) *algorithm.Schedule {
-	point := rand.Intn(len(p1.Assignments))
-	childGenes := make([]*algorithm.Assignment, len(p1.Assignments))
+	childAssigns := make([]*algorithm.Assignment, len(p1.Assignments))
 
 	for i := 0; i < len(p1.Assignments); i++ {
-		var parentGene *algorithm.Assignment
-		if i < point {
-			parentGene = p1.Assignments[i]
+		var parentAssign *algorithm.Assignment
+
+		// Uniform Crossover: случайно выбираем родителя для каждого гена
+		if rand.Float64() < 0.5 {
+			parentAssign = p1.Assignments[i]
 		} else {
-			parentGene = p2.Assignments[i]
+			parentAssign = p2.Assignments[i]
 		}
 
-		// ГЛУБОКОЕ КОПИРОВАНИЕ (Deep Copy), чтобы мутация не затрагивала родителей
-		childGenes[i] = &algorithm.Assignment{
-			ClassID:       parentGene.ClassID,
-			RoomID:        parentGene.RoomID,
-			SlotID:        parentGene.SlotID,
-			InstructorID:  parentGene.InstructorID,
-			GroupIDs:      append([]uint(nil), parentGene.GroupIDs...), // Копия среза
-			StudentsCount: parentGene.StudentsCount,
+		childAssigns[i] = &algorithm.Assignment{
+			ClassID:       parentAssign.ClassID,
+			RoomID:        parentAssign.RoomID,
+			SlotID:        parentAssign.SlotID,
+			InstructorID:  parentAssign.InstructorID,
+			GroupIDs:      append([]uint(nil), parentAssign.GroupIDs...),
+			StudentsCount: parentAssign.StudentsCount,
 		}
 	}
-
-	return algorithm.NewSchedule(childGenes)
+	return algorithm.NewSchedule(childAssigns)
 }
 
 // mutate случайным образом изменяет гены с заданным шансом (rate)

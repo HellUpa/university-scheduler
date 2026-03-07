@@ -29,21 +29,31 @@ func Seed(db *gorm.DB) {
 	days := []domain.DayOfWeek{
 		domain.DayMonday, domain.DayTuesday, domain.DayWednesday, domain.DayThursday, domain.DayFriday,
 	}
+
+	// Сетка: 50 мин урок + 10 мин перемена (кроме больших по 20 мин)
 	times := [][2]string{
-		{"09:00", "10:30"}, // 1 пара
-		{"10:40", "12:10"}, // 2 пара
-		{"13:00", "14:30"}, // 3 пара
-		{"14:40", "16:10"}, // 4 пара
+		{"08:00", "08:50"}, // 1 слот
+		{"09:00", "09:50"}, // 2 слот
+		{"10:00", "10:50"}, // 3 слот
+		// --- Большая перемена 20 мин ---
+		{"11:10", "12:00"}, // 4 слот
+		{"12:10", "13:00"}, // 5 слот
+		{"13:10", "14:00"}, // 6 слот
+		{"14:10", "15:00"}, // 7 слот
+		{"15:10", "16:00"}, // 8 слот
+		// --- Большая перемена 20 мин ---
+		{"16:20", "17:10"}, // 9 слот
+		{"17:20", "18:10"}, // 10 слот
 	}
 
 	var slots []domain.TimeSlot
 	for _, day := range days {
-		for period := 1; period <= 4; period++ {
+		for i, time := range times {
 			slots = append(slots, domain.TimeSlot{
 				Day:          day,
-				PeriodNumber: period,
-				StartTime:    times[period-1][0],
-				EndTime:      times[period-1][1],
+				PeriodNumber: i + 1,
+				StartTime:    time[0],
+				EndTime:      time[1],
 			})
 		}
 	}
@@ -53,17 +63,20 @@ func Seed(db *gorm.DB) {
 	// 2. ГЕНЕРАЦИЯ АУДИТОРИЙ (Разные этажи и типы)
 	// ==========================================
 	rooms := []domain.Room{
-		// 1 этаж (Большие потоковые)
+		// 1 этаж (Лекции)
 		{Name: "101-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
 		{Name: "102-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
+		{Name: "103-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
 		// 2 этаж (Практики)
 		{Name: "201-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
 		{Name: "202-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
 		{Name: "203-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		// 3 этаж (Компьютерные классы / Лабы)
+		{Name: "204-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		// 3 этаж (Лабы)
 		{Name: "301-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "302-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "303-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
+		{Name: "304-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 	}
 	db.Create(&rooms)
 
@@ -74,7 +87,8 @@ func Seed(db *gorm.DB) {
 		{Name: "Иванов И.И."}, {Name: "Петров П.П."}, {Name: "Сидоров С.С."},
 		{Name: "Смирнов А.А."}, {Name: "Кузнецов В.В."}, {Name: "Попов Д.Д."},
 		{Name: "Соколов Е.Е."}, {Name: "Лебедев Ж.Ж."}, {Name: "Козлов З.З."},
-		{Name: "Новиков К.К."},
+		{Name: "Новиков К.К."}, {Name: "Морозов М.М."}, {Name: "Волков В.В."},
+		{Name: "Алексеев А.А."}, {Name: "Николаев Н.Н."}, {Name: "Макаров М.М."},
 	}
 	db.Create(&instructors)
 
@@ -88,12 +102,25 @@ func Seed(db *gorm.DB) {
 	// ==========================================
 	// 4. ПРЕДМЕТЫ И УЧЕБНЫЙ ПЛАН (Кредиты и Часы)
 	// ==========================================
+	// Формула: 5 кредитов = 1 час лекций + 2 часа практик/лаб.
 	subjects := []domain.Subject{
-		{Name: "Высшая математика", Credits: 5, LectureHours: 2, PracticeHours: 4, LabHours: 0},
-		{Name: "Программирование (Go)", Credits: 6, LectureHours: 2, PracticeHours: 0, LabHours: 4},
-		{Name: "Базы данных", Credits: 4, LectureHours: 2, PracticeHours: 2, LabHours: 2},
-		{Name: "История", Credits: 2, LectureHours: 2, PracticeHours: 2, LabHours: 0},
-		{Name: "Английский язык", Credits: 3, LectureHours: 0, PracticeHours: 4, LabHours: 0},
+		// Фундаментальные (много практики)
+		{Name: "Высшая математика", Credits: 5, LectureHours: 1, PracticeHours: 2, LabHours: 0},
+		{Name: "Дискретная математика", Credits: 4, LectureHours: 1, PracticeHours: 2, LabHours: 0},
+		{Name: "Физика", Credits: 4, LectureHours: 1, PracticeHours: 1, LabHours: 1},
+
+		// Профильные IT (много лаб)
+		{Name: "Программирование (Go)", Credits: 6, LectureHours: 1, PracticeHours: 0, LabHours: 3},
+		{Name: "Алгоритмы и структуры", Credits: 5, LectureHours: 1, PracticeHours: 0, LabHours: 2},
+		{Name: "Базы данных", Credits: 5, LectureHours: 1, PracticeHours: 1, LabHours: 1},
+		{Name: "Архитектура ЭВМ", Credits: 4, LectureHours: 1, PracticeHours: 0, LabHours: 2},
+		{Name: "Компьютерные сети", Credits: 4, LectureHours: 1, PracticeHours: 0, LabHours: 2},
+		{Name: "Операционные системы", Credits: 5, LectureHours: 1, PracticeHours: 1, LabHours: 1},
+
+		// Гуманитарные (только лекции и практики)
+		{Name: "История", Credits: 2, LectureHours: 1, PracticeHours: 1, LabHours: 0},
+		{Name: "Философия", Credits: 2, LectureHours: 1, PracticeHours: 1, LabHours: 0},
+		{Name: "Английский язык", Credits: 3, LectureHours: 0, PracticeHours: 3, LabHours: 0},
 	}
 	db.Create(&subjects)
 
@@ -117,8 +144,8 @@ func Seed(db *gorm.DB) {
 			// 1. ЛЕКЦИИ (Потоковые)
 			// Если у предмета есть лекции, создаем ОДНУ карточку для всего потока
 			if sub.LectureHours > 0 {
-				blocksCount := sub.LectureHours / 2 // Сколько пар нужно
-				instID := getRandomInst()           // Один лектор на поток
+				blocksCount := sub.LectureHours // Сколько пар нужно
+				instID := getRandomInst()       // Один лектор на поток
 
 				for i := 0; i < blocksCount; i++ {
 					classes = append(classes, domain.CourseClass{
@@ -134,7 +161,7 @@ func Seed(db *gorm.DB) {
 
 			// 2. ПРАКТИКИ (Индивидуально для каждой группы)
 			if sub.PracticeHours > 0 {
-				blocksCount := sub.PracticeHours / 2
+				blocksCount := sub.PracticeHours
 				for _, grp := range stream {
 					instID := getRandomInst() // Практику могут вести разные преподы
 					for i := 0; i < blocksCount; i++ {
@@ -152,7 +179,7 @@ func Seed(db *gorm.DB) {
 
 			// 3. ЛАБОРАТОРНЫЕ (Индивидуально для каждой группы)
 			if sub.LabHours > 0 {
-				blocksCount := sub.LabHours / 2
+				blocksCount := sub.LabHours
 				for _, grp := range stream {
 					instID := getRandomInst()
 					for i := 0; i < blocksCount; i++ {
