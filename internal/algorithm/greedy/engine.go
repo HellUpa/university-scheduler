@@ -131,8 +131,8 @@ func (eng *GreedyEngine) Run() (*algorithm.Schedule, error) {
 
 				// Свободны ли все группы?
 				groupsBusy := false
-				for _, gid := range groupIDs {
-					if groupUsage[struct{ S, G uint }{slotID, gid}] {
+				for _, group := range cls.Groups { // <--- Итерируем сам объект
+					if groupUsage[struct{ S, G uint }{slotID, group.ID}] {
 						groupsBusy = true
 						break
 					}
@@ -144,8 +144,8 @@ func (eng *GreedyEngine) Run() (*algorithm.Schedule, error) {
 				// БИНГО! Нашли место. Бронируем его!
 				roomUsage[struct{ S, R uint }{slotID, roomID}] = true
 				instructorUsage[struct{ S, I uint }{slotID, cls.InstructorID}] = true
-				for _, gid := range groupIDs {
-					groupUsage[struct{ S, G uint }{slotID, gid}] = true
+				for _, group := range cls.Groups {
+					groupUsage[struct{ S, G uint }{slotID, group.ID}] = true
 				}
 
 				assignments[i] = &algorithm.Assignment{
@@ -172,8 +172,8 @@ func (eng *GreedyEngine) Run() (*algorithm.Schedule, error) {
 			fmt.Printf("Greedy Algorithm WARNING: Forced collision for ClassID %d\n", cls.ID)
 			assignments[i] = &algorithm.Assignment{
 				ClassID:       cls.ID,
-				RoomID:        eng.RoomIDs[0],
-				SlotID:        eng.SlotIDs[0],
+				RoomID:        0,
+				SlotID:        0,
 				InstructorID:  cls.InstructorID,
 				GroupIDs:      groupIDs,
 				StudentsCount: studentsCount,

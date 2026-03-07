@@ -72,11 +72,15 @@ func Seed(db *gorm.DB) {
 		{Name: "202-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
 		{Name: "203-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
 		{Name: "204-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "205-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "206-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
 		// 3 этаж (Лабы)
 		{Name: "301-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "302-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "303-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "304-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
+		{Name: "305-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
+		{Name: "306-Лаб", Capacity: 15, Type: domain.RoomTypeLab, Floor: 3},
 	}
 	db.Create(&rooms)
 
@@ -89,6 +93,7 @@ func Seed(db *gorm.DB) {
 		{Name: "Соколов Е.Е."}, {Name: "Лебедев Ж.Ж."}, {Name: "Козлов З.З."},
 		{Name: "Новиков К.К."}, {Name: "Морозов М.М."}, {Name: "Волков В.В."},
 		{Name: "Алексеев А.А."}, {Name: "Николаев Н.Н."}, {Name: "Макаров М.М."},
+		{Name: "Алексеева В.Г."}, {Name: "Радионов Н.Н."}, {Name: "Лукашенко М.М."},
 	}
 	db.Create(&instructors)
 

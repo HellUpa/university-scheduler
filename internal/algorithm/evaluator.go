@@ -29,10 +29,11 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 
 	rules := []Rule{
-		RuleCapacity, // Жесткие
-		RuleOverlaps, // Жесткие
-		RuleRoomType, // Мягкие
-		RuleGaps,     // Мягкие
+		RuleCapacity,   // Жесткие
+		RuleUnassigned, // Жесткие
+		RuleOverlaps,   // Жесткие
+		RuleRoomType,   // Мягкие
+		RuleGaps,       // Мягкие
 	}
 
 	return &Evaluator{

@@ -54,6 +54,18 @@ func RuleCapacity(schedule *Schedule, ctx *EvalContext) (int, float64) {
 	return hardConflicts, 0.0
 }
 
+func RuleUnassigned(schedule *Schedule, ctx *EvalContext) (int, float64) {
+	assignedCount := 0
+	for _, assignment := range schedule.Assignments {
+		if assignment.SlotID != 0 || assignment.RoomID == 0 { // Считаем 0 как "не назначено"
+			assignedCount++
+		}
+	}
+	unassignedCount := len(schedule.Assignments) - assignedCount
+
+	return unassignedCount, 0.0
+}
+
 // RuleOverlaps проверяет накладки: одна аудитория/препод/группа в одно время
 func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 	hardConflicts := 0
@@ -62,6 +74,9 @@ func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 	groupUsage := make(map[struct{ S, G uint }]bool)
 
 	for _, assignment := range schedule.Assignments {
+		// 1. Получаем ИСТИННЫЕ данные о классе
+		cls := ctx.ClassesMap[assignment.ClassID]
+
 		// Проверка аудитории
 		roomKey := struct{ S, R uint }{assignment.SlotID, assignment.RoomID}
 		if roomUsage[roomKey] {
@@ -69,15 +84,17 @@ func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 		}
 		roomUsage[roomKey] = true
 
-		// Проверка преподавателя
-		instKey := struct{ S, I uint }{assignment.SlotID, assignment.InstructorID}
+		// Проверка преподавателя (берем ID из cls, а не из assignment, для надежности)
+		instKey := struct{ S, I uint }{assignment.SlotID, cls.InstructorID}
 		if instructorUsage[instKey] {
 			hardConflicts++
 		}
 		instructorUsage[instKey] = true
 
-		// Проверка групп
-		for _, gid := range assignment.GroupIDs {
+		// Проверка групп (Берем из CLS, а не из assignment!)
+		for _, group := range cls.Groups {
+			gid := group.ID // Получаем реальный ID
+
 			grpKey := struct{ S, G uint }{assignment.SlotID, gid}
 			if groupUsage[grpKey] {
 				hardConflicts++

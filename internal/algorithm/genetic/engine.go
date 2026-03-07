@@ -114,6 +114,8 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 
 		// === ЛОГИКА "УДАР И ВОССТАНОВЛЕНИЕ" ===
 
+		currentMutationRate := eng.MutationRate
+
 		// Если мы в фазе восстановления - просто уменьшаем счетчик и ничего не делаем
 		if recoveryCounter > 0 {
 			recoveryCounter--
@@ -123,27 +125,32 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 			if bestInd.Fitness > bestFitnessOverall+0.001 {
 				bestFitnessOverall = bestInd.Fitness
 				stagnantGenerations = 0
+				// Сброс мутации до базовой (Остывание)
+				eng.MutationRate = 0.05
 			} else {
 				stagnantGenerations++
 			}
 
-			// Если застряли на 15 поколений -> Готовим УДАР
-			if stagnantGenerations >= 15 {
-				shockMode = true
-				stagnantGenerations = 0                                // Сброс
-				recoveryCounter = int(float64(eng.Generations) * 0.05) // Даем время восстановиться, 5% от общего числа поколений, если больше 20
-				if recoveryCounter < 20 {
-					recoveryCounter = 20
-				}
-				log.Printf("[Gen %d] !!! STAGNATION DETECTED -> SHOCK THERAPY !!!", gen)
-			}
-		}
+			// Если застряли - начинаем ПЛАВНО нагревать
+			if stagnantGenerations > 5 {
+				// Каждые 5 поколений стагнации добавляем +0.01 к мутации
+				heatStep := float64(stagnantGenerations/5) * 0.01
+				currentMutationRate = 0.05 + heatStep
 
-		// Определяем текущую мутацию
-		currentMutationRate := eng.MutationRate
-		if shockMode {
-			currentMutationRate = 0.5 // Взрываем 50% генов!
-			shockMode = false         // Удар длится всего 1 поколение
+				// Ограничитель нагрева (чтобы не сжечь всё)
+				if currentMutationRate > 0.2 {
+					currentMutationRate = 0.2
+				}
+			}
+
+			// ШОКОВАЯ ТЕРАПИЯ (Если нагрев не помог долгое время)
+			if stagnantGenerations > 40 { // Только если ОЧЕНЬ долго стоим (40 поколений)
+				currentMutationRate = 0.4 // Сильный удар
+				shockMode = true
+				stagnantGenerations = 0                                       // Сброс счетчика, чтобы начать нагрев заново
+				recoveryCounter = max(int(float64(eng.Generations)*0.05), 20) // Даем время восстановиться, 5% от общего числа поколений, если больше 20
+				log.Printf("[Gen %d] !!! SHOCK THERAPY !!!", gen)
+			}
 		}
 		// =========================================
 
@@ -163,8 +170,8 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 		// 3. Селекция и Скрещивание
 		newPop := make([]*algorithm.Schedule, 0, eng.PopulationSize)
 		eliteCount := int(float64(eng.PopulationSize) * 0.1)
-		if currentMutationRate > 0.4 {
-			eliteCount = 1 // При шоке оставляем только самого лучшего, остальных в топку
+		if shockMode {
+			eliteCount = 2 // При шоке оставляем только самого лучшего, остальных в топку
 		}
 		newPop = append(newPop, population[:eliteCount]...)
 
