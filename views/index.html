@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UCTTP Scheduler AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loader { border-top-color: #3498db; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
+
+<div class="container mx-auto px-4 py-8 max-w-7xl">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div>
+            <h1 class="text-3xl font-extrabold text-indigo-600 tracking-tight">AI Scheduler</h1>
+            <p class="text-sm text-gray-500 mt-1">Генерация расписания (Генетический vs Жадный алгоритмы)</p>
+        </div>
+        <div class="flex gap-4">
+            <button onclick="generateSchedule('greedy')" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg transition-colors shadow-sm">
+                ⚡ Жадный Алгоритм
+            </button>
+            <button onclick="generateSchedule('genetic')" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm flex items-center gap-2">
+                🧬 Генетический (AI)
+            </button>
+        </div>
+    </header>
+
+    <!-- Stats Panel -->
+    <div id="statsPanel" class="hidden mb-6 grid grid-cols-3 gap-4">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+            <p class="text-sm text-gray-500">Фитнес-оценка</p>
+            <p id="statFitness" class="text-2xl font-bold text-gray-800">-</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+            <p class="text-sm text-gray-500">Время выполнения</p>
+            <p id="statTime" class="text-2xl font-bold text-gray-800">-</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+            <p class="text-sm text-gray-500">Алгоритм</p>
+            <p id="statAlgo" class="text-2xl font-bold text-indigo-600">-</p>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loader" class="hidden flex flex-col justify-center items-center py-20">
+        <div class="loader ease-linear rounded-full border-4 border-gray-200 h-16 w-16 mb-4"></div>
+        <p class="text-gray-500 font-medium animate-pulse" id="loadingText">Эволюция расписания...</p>
+    </div>
+
+    <!-- Schedule Table -->
+    <div id="scheduleContainer" class="hidden bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full text-left border-collapse">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600 text-sm uppercase tracking-wider border-b border-gray-200">
+                    <th class="p-4 font-semibold">День / Время</th>
+                    <th class="p-4 font-semibold">Аудитория</th>
+                    <th class="p-4 font-semibold">Предмет</th>
+                    <th class="p-4 font-semibold">Преподаватель</th>
+                    <th class="p-4 font-semibold">Группы</th>
+                </tr>
+            </thead>
+            <tbody id="scheduleBody" class="divide-y divide-gray-100 text-sm">
+                <!-- Rows will be injected here by JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function generateSchedule(type) {
+        const loader = document.getElementById('loader');
+        const container = document.getElementById('scheduleContainer');
+        const stats = document.getElementById('statsPanel');
+        const tbody = document.getElementById('scheduleBody');
+        const loadingText = document.getElementById('loadingText');
+
+        // UI Reset
+        loader.classList.remove('hidden');
+        container.classList.add('hidden');
+        stats.classList.add('hidden');
+        tbody.innerHTML = '';
+        loadingText.innerText = type === 'genetic' ? '🧬 Идет процесс эволюции (AI)...' : '⚡ Работает жадный алгоритм...';
+
+        try {
+            const endpoint = type === 'genetic' ? '/api/v1/schedule/generate/genetic' : '/api/v1/schedule/generate/greedy';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ population_size: 200, generations: 400, mutation_rate: 0.05 }) // Для ГА
+            });
+
+            const data = await response.json();
+
+            if (data.status !== 'success') {
+                alert('Ошибка генерации: ' + data.error);
+                return;
+            }
+
+            // Update Stats
+            document.getElementById('statFitness').innerText = data.fitness_score.toFixed(4);
+            document.getElementById('statFitness').className = `text-2xl font-bold ${data.fitness_score >= 1.0 ? 'text-green-500' : 'text-red-500'}`;
+            document.getElementById('statTime').innerText = `${data.time_taken_ms} ms`;
+            document.getElementById('statAlgo').innerText = data.algorithm;
+
+            // Sort schedule by Day and Time
+            const order = { "monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6 };
+            data.schedule.sort((a, b) => {
+                if (order[a.day] !== order[b.day]) return order[a.day] - order[b.day];
+                return a.time.localeCompare(b.time);
+            });
+
+            // Render Table Rows
+            data.schedule.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition-colors";
+                tr.innerHTML = `
+                    <td class="p-4 whitespace-nowrap">
+                        <span class="font-medium text-gray-800 capitalize">${item.day}</span><br>
+                        <span class="text-xs text-gray-500">${item.time}</span>
+                    </td>
+                    <td class="p-4"><span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs font-bold">${item.room}</span></td>
+                    <td class="p-4 font-medium text-gray-800">${item.subject}</td>
+                    <td class="p-4 text-gray-600">${item.instructor}</td>
+                    <td class="p-4"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded-md text-xs">${item.groups}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Show UI
+            stats.classList.remove('hidden');
+            container.classList.remove('hidden');
+
+        } catch (error) {
+            alert('Ошибка сети или сервера: ' + error);
+        } finally {
+            loader.classList.add('hidden');
+        }
+    }
+</script>
+</body>
+</html>
