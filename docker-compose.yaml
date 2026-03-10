@@ -17,8 +17,6 @@ services:
       - ./env/config.yaml:/etc/scheduler/config.yaml
     environment:
       - CONFIG_PATH=/etc/scheduler
-    env_file:
-      - .env
     networks:
       - scheduler-network
 
