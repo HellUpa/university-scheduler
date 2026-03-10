@@ -42,7 +42,8 @@ func (eng *GreedyEngine) Prepare() error {
 		return err
 	}
 
-	eng.Evaluator = algorithm.NewEvaluator(rooms, slots, eng.Classes)
+	// TODO: Добавить кастомную конфигурацию
+	eng.Evaluator = algorithm.NewEvaluator(nil, rooms, slots, eng.Classes)
 
 	for _, r := range rooms {
 		eng.RoomIDs = append(eng.RoomIDs, r.ID)

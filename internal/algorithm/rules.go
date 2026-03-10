@@ -8,22 +8,35 @@ import (
 // EvaluatorConfig хранит веса и штрафы.
 // В будущем это можно принимать прямо из JSON запроса!
 type EvaluatorConfig struct {
-	PenaltyGap           float64
-	PenaltyWrongRoomType float64
-	BonusPerfectRoomType float64
-	BonusDayWithoutGaps  float64
-	TanhScaleFactor      float64
-	SoftScoreWeight      float64
+	// Настройки мягких ограничений
+	MaxClassesPerDay int
+
+	// Штрафы за мягкие ограничения
+	PenaltyGap                  float64
+	PenaltyWrongRoomType        float64
+	BonusPerfectRoomType        float64
+	BonusDayWithoutGaps         float64
+	PenaltyOverloadedDay        float64
+	PenaltyLectureAfterPractice float64
+
+	// настройки расчета для функции мягких ограничений
+	TanhScaleFactor float64
+	SoftScoreWeight float64
 }
 
 // DefaultConfig - настройки по умолчанию
 var DefaultConfig = EvaluatorConfig{
-	PenaltyGap:           -20.0,
-	PenaltyWrongRoomType: -10.0,
-	BonusPerfectRoomType: +5.0,
-	BonusDayWithoutGaps:  +50.0,
-	TanhScaleFactor:      0.005,
-	SoftScoreWeight:      0.5,
+	MaxClassesPerDay: 5,
+
+	PenaltyGap:                  -20.0,
+	PenaltyWrongRoomType:        -10.0,
+	BonusPerfectRoomType:        +5.0,
+	BonusDayWithoutGaps:         +20.0,
+	PenaltyOverloadedDay:        -10.0,
+	PenaltyLectureAfterPractice: -25.0,
+
+	TanhScaleFactor: 0.005,
+	SoftScoreWeight: 0.5,
 }
 
 // EvalContext содержит все предзагруженные данные для быстрого доступа
@@ -165,4 +178,78 @@ func RuleCompactness(schedule *Schedule, ctx *EvalContext) (int, float64) {
 		bonus += float64(11-slot.PeriodNumber) * 0.5
 	}
 	return 0, bonus
+}
+
+// RuleOverloadedDay штрафует за слишком большое количество занятий у группы в один день.
+func RuleOverloadedDay(schedule *Schedule, ctx *EvalContext) (int, float64) {
+	softScore := 0.0
+
+	// Проходим по расписанию каждой группы
+	for _, dailySchedule := range schedule.GroupDailySchedule {
+		// Проходим по дням недели для этой группы
+		for _, slotsInDay := range dailySchedule {
+			numClasses := len(slotsInDay)
+
+			// Если количество пар в день превышает "комфортное"
+			if numClasses > ctx.Config.MaxClassesPerDay {
+				// Штраф может быть прогрессивным.
+				// За 5-ю пару - один штраф, за 6-ю - уже два, и т.д.
+				overload := numClasses - ctx.Config.MaxClassesPerDay
+				penalty := float64(overload) * ctx.Config.PenaltyOverloadedDay
+				softScore += penalty
+			}
+		}
+	}
+
+	return 0, softScore
+}
+
+// RuleLectureBeforePractice штрафует, если практическое занятие по предмету
+// стоит в расписании раньше лекции.
+func RuleLectureBeforePractice(schedule *Schedule, ctx *EvalContext) (int, float64) {
+	softScore := 0.0
+
+	// 1. Группируем все занятия по ID предмета
+	assignmentsBySubject := make(map[uint][]*Assignment)
+	for _, assign := range schedule.Assignments {
+		classInfo := ctx.ClassesMap[assign.ClassID]
+		subjectID := classInfo.SubjectID
+		assignmentsBySubject[subjectID] = append(assignmentsBySubject[subjectID], assign)
+	}
+
+	// 2. Анализируем каждую группу предметов
+	for _, assignments := range assignmentsBySubject {
+		var lectureSlots []uint
+		var practiceSlots []uint
+
+		// Разделяем на лекции и практики
+		for _, assign := range assignments {
+			classInfo := ctx.ClassesMap[assign.ClassID]
+			if classInfo.IsLecture {
+				lectureSlots = append(lectureSlots, assign.SlotID)
+			} else {
+				practiceSlots = append(practiceSlots, assign.SlotID)
+			}
+		}
+
+		// Если есть и лекции, и практики по этому предмету
+		if len(lectureSlots) > 0 && len(practiceSlots) > 0 {
+			// Находим самый ранний слот лекции
+			minLectureSlot := uint(9999) // Большое число
+			for _, slot := range lectureSlots {
+				if slot < minLectureSlot {
+					minLectureSlot = slot
+				}
+			}
+
+			// Проверяем каждую практику
+			for _, pSlot := range practiceSlots {
+				if pSlot < minLectureSlot {
+					softScore += ctx.Config.PenaltyLectureAfterPractice
+				}
+			}
+		}
+	}
+
+	return 0, softScore
 }
