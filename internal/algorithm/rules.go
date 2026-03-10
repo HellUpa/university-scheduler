@@ -35,7 +35,7 @@ var DefaultConfig = EvaluatorConfig{
 	PenaltyOverloadedDay:        -10.0,
 	PenaltyLectureAfterPractice: -25.0,
 
-	TanhScaleFactor: 0.005,
+	TanhScaleFactor: 0.5,
 	SoftScoreWeight: 0.5,
 }
 

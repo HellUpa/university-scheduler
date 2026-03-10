@@ -63,25 +63,36 @@ func Seed(db *gorm.DB) {
 	// 2. ГЕНЕРАЦИЯ АУДИТОРИЙ (Разные этажи и типы)
 	// ==========================================
 	rooms := []domain.Room{
-		// 1 этаж (Лекции)
-		{Name: "101-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
-		{Name: "102-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
-		{Name: "103-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
-		{Name: "104-Лек", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
-		// 2 этаж (Практики)
-		{Name: "201-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		{Name: "202-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		{Name: "203-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		{Name: "204-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		{Name: "205-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		{Name: "206-Пр", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
-		// 3 этаж (Лабы)
+		// Лекционные (5 штук)
+		{Name: "Л-101", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
+		{Name: "Л-102", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
+		{Name: "Л-103", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
+		{Name: "Л-104", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 2},
+		{Name: "Л-105", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 2},
+
+		// Практические (10 штук)
+		{Name: "П-201", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "П-202", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "П-203", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "П-204", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "П-205", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
+		{Name: "П-206", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		{Name: "П-207", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		{Name: "П-208", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		{Name: "П-209", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		{Name: "П-210", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+
+		// Лабораторные (10 штук)
 		{Name: "301-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "302-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "303-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "304-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
 		{Name: "305-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
-		{Name: "306-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
+		{Name: "306-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		{Name: "307-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		{Name: "308-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		{Name: "309-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		{Name: "310-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
 	}
 	db.Create(&rooms)
 
@@ -95,15 +106,19 @@ func Seed(db *gorm.DB) {
 		{Name: "Новиков К.К."}, {Name: "Морозов М.М."}, {Name: "Волков В.В."},
 		{Name: "Алексеев А.А."}, {Name: "Николаев Н.Н."}, {Name: "Макаров М.М."},
 		{Name: "Алексеева В.Г."}, {Name: "Радионов Н.Н."}, {Name: "Лукашенко М.М."},
-		// {Name: "Гудко А.А."}, {Name: "Жаринов Н.Н."}, {Name: "Кириченко М.М."},
+		{Name: "Гудко А.А."}, {Name: "Жаринов Н.Н."}, {Name: "Кириченко М.М."},
 		// {Name: "Андропов В.Г."}, {Name: "Михалков Н.Н."}, {Name: "Кижуч М.М."},
+		// {Name: "Казыбек А.А."}, {Name: "Богданов В.В."}, {Name: "Антонов Д.Д."},
+		// {Name: "Кличко Е.Е."}, {Name: "Журавлев Ж.Ж."}, {Name: "Никитенко З.З."},
 	}
 	db.Create(&instructors)
 
 	// Допустим, у нас 2 потока (1 курс и 2 курс), по 3 группы в каждом
 	groups := []domain.Group{
-		{Name: "CS-101", Size: 25}, {Name: "CS-102", Size: 24}, {Name: "CS-103", Size: 26}, // 1 курс (Поток 1)
-		{Name: "SE-201", Size: 20}, {Name: "SE-202", Size: 22}, {Name: "SE-203", Size: 21}, // 2 курс (Поток 2)
+		{Name: "CS-101", Size: 25}, {Name: "CS-102", Size: 24}, {Name: "CS-103", Size: 26}, // Поток 1
+		{Name: "SE-201", Size: 20}, {Name: "SE-202", Size: 22}, {Name: "SE-203", Size: 21}, // Поток 2
+		{Name: "AI-301", Size: 25}, {Name: "AI-302", Size: 24}, {Name: "AI-303", Size: 26}, // Поток 3
+		{Name: "DS-401", Size: 20}, {Name: "DS-402", Size: 22}, {Name: "DS-403", Size: 21}, // Поток 4
 	}
 	db.Create(&groups)
 
@@ -139,9 +154,11 @@ func Seed(db *gorm.DB) {
 	}
 
 	// Разделим группы на потоки
-	stream1 := []*domain.Group{&groups[0], &groups[1], &groups[2]} // CS
-	stream2 := []*domain.Group{&groups[3], &groups[4], &groups[5]} // SE
-	allStreams := [][]*domain.Group{stream1, stream2}
+	stream1 := []*domain.Group{&groups[0], &groups[1], &groups[2]}   // CS
+	stream2 := []*domain.Group{&groups[3], &groups[4], &groups[5]}   // SE
+	stream3 := []*domain.Group{&groups[6], &groups[7], &groups[8]}   // AI
+	stream4 := []*domain.Group{&groups[9], &groups[10], &groups[11]} // DS
+	allStreams := [][]*domain.Group{stream1, stream2, stream3, stream4}
 
 	for _, stream := range allStreams {
 		for _, sub := range subjects {

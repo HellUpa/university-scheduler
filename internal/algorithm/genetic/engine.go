@@ -136,9 +136,14 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 
 		// Логирование прогресса
 		if gen%20 == 0 || gen == eng.Generations-1 {
-			log.Printf("[Gen %3d] Best Fit: %.4f | Stag: %2d | MutRate: %.3f",
+			log.Printf("[Gen %3d] Best Fit: %.7f | Stag: %2d | MutRate: %.3f",
 				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
 		}
+
+		// if bestFitnessOverall >= 1.49999 {
+		// 	log.Println("Best individual found, break the cycle")
+		// 	break
+		// }
 
 		// 3. Селекция и Скрещивание
 		newPop := make([]*algorithm.Schedule, 0, eng.PopulationSize)
@@ -320,42 +325,76 @@ func (eng *GeneticEngine) mutate(schedule *algorithm.Schedule, rate float64) {
 }
 
 // softMutate пытается переместить одно случайное занятие в новый случайный слот,
-// но только если это не создает жестких конфликтов.
+// но только если это не создает жестких конфликтов. Делает несколько попыток
 func (eng *GeneticEngine) softMutate(schedule *algorithm.Schedule, rate float64) {
 	if rand.Float64() >= rate {
-		return // Мутация не сработала по вероятности
-	}
-
-	// 1. Выбираем случайное занятие для перемещения
-	if len(schedule.Assignments) == 0 {
 		return
 	}
-	assignIndex := rand.Intn(len(schedule.Assignments))
-	assignToMove := schedule.Assignments[assignIndex]
 
-	// 2. Сохраняем его текущее положение, чтобы можно было откатиться
-	originalSlotID := assignToMove.SlotID
+	// Попробуем сделать 10 попыток найти удачную мутацию, прежде чем сдаться
+	for range 10 {
+		assignIndex := rand.Intn(len(schedule.Assignments))
+		assignToMove := schedule.Assignments[assignIndex]
 
-	// 3. Выбираем новый случайный слот
-	targetSlotID := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+		originalSlotID := assignToMove.SlotID
+		targetSlotID := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
 
-	if originalSlotID == targetSlotID {
-		return // Перемещать в то же место нет смысла
+		if originalSlotID == targetSlotID {
+			continue
+		}
+
+		// --- КЛЮЧЕВОЕ УЛУЧШЕНИЕ ---
+		// Быстрая проверка, не занят ли этот слот уже этой же группой или преподавателем
+		// Это отсеет самые очевидные жесткие конфликты до полной дорогой проверки.
+		isOccupied := false
+		for _, otherAssign := range schedule.Assignments {
+			if otherAssign.SlotID == targetSlotID {
+				if otherAssign.RoomID == assignToMove.RoomID {
+					isOccupied = true // Аудитория занята
+					break
+				}
+				if otherAssign.InstructorID == assignToMove.InstructorID {
+					isOccupied = true // Преподаватель занят
+					break
+				}
+				for _, groupID := range assignToMove.GroupIDs {
+					for _, otherGroupID := range otherAssign.GroupIDs {
+						if groupID == otherGroupID {
+							isOccupied = true // Группа занята
+							break
+						}
+					}
+					if isOccupied {
+						break
+					}
+				}
+			}
+			if isOccupied {
+				break
+			}
+		}
+
+		if isOccupied {
+			continue // Слот очевидно занят, пробуем еще раз
+		}
+		// -------------------------
+
+		assignToMove.SlotID = targetSlotID
+
+		// 5. Проверяем ТОЛЬКО жесткие конфликты
+		hardConflicts, _ := eng.Evaluator.CountConflicts(schedule)
+
+		// 6. Принимаем решение
+		if hardConflicts > 0 {
+			// Перемещение создало жесткий конфликт! Откатываемся.
+			assignToMove.SlotID = originalSlotID
+			// и продолжаем цикл, чтобы попробовать еще раз
+		} else {
+			// Конфликтов нет! Мутация успешна.
+			// Теперь выходим из функции.
+			return
+		}
 	}
-
-	// 4. Временно перемещаем занятие
-	assignToMove.SlotID = targetSlotID
-
-	// 5. Проверяем, не сломали ли мы всё (жесткие ограничения)
-	hardConflicts, _ := eng.Evaluator.CountConflicts(schedule) // Считает и жесткие, и мягкие
-
-	// 6. Принимаем решение
-	if hardConflicts > 0 {
-		// Перемещение создало конфликт! Откатываемся.
-		assignToMove.SlotID = originalSlotID
-	}
-	// Если hardConflicts == 0, то ничего не делаем, оставляя занятие на новом месте.
-	// Изменение принято!
 }
 
 func tournamentSelect(population []*algorithm.Schedule, k int) *algorithm.Schedule {
