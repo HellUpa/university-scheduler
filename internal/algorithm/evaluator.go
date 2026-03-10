@@ -1,6 +1,7 @@
 package algorithm
 
 import (
+	"fmt"
 	"math"
 	"scheduler/internal/domain"
 )
@@ -29,11 +30,12 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 
 	rules := []Rule{
-		RuleCapacity,   // Жесткие
-		RuleUnassigned, // Жесткие
-		RuleOverlaps,   // Жесткие
-		RuleRoomType,   // Мягкие
-		RuleGaps,       // Мягкие
+		RuleCapacity,    // Жесткие
+		RuleUnassigned,  // Жесткие
+		RuleOverlaps,    // Жесткие
+		RuleRoomType,    // Мягкие
+		RuleGaps,        // Мягкие
+		RuleCompactness, // Мягкие
 	}
 
 	return &Evaluator{
@@ -42,32 +44,37 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 }
 
-// CalculateFitness теперь просто оркестратор
-func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
+func (e *Evaluator) CountConflicts(schedule *Schedule) (hardConflicts int, softConflicts float64) {
 	// 1. Предварительная сборка данных (чтобы правилам было проще)
 	e.buildGroupDailySchedule(schedule)
 
-	totalHardConflicts := 0
-	totalSoftScore := 0.0
+	hardConflicts = 0
+	softConflicts = 0.0
 
 	// 2. Прогоняем расписание через ВСЕ правила
 	for _, rule := range e.Rules {
 		h, s := rule(schedule, e.Context)
-		totalHardConflicts += h
-		totalSoftScore += s
+		hardConflicts += h
+		softConflicts += s
 	}
 
-	// 3. Математика
+	return hardConflicts, softConflicts
+}
+
+// CalculateFitness теперь просто оркестратор
+func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
+	totalHardConflicts, totalSoftScore := e.CountConflicts(schedule)
+
+	// 1. Математика
 	baseFitness := 1.0 / (1.0 + float64(totalHardConflicts))
 
-	if baseFitness < 1.0 {
-		schedule.Fitness = baseFitness
-		return baseFitness
-	}
+	// 2. Считаем бонусы с помощью Tanh (от 0 до 1)
+	// Формула: (tanh(k * score) + 1) / 2
+	softScoreNormalized := (math.Tanh(e.Context.Config.TanhScaleFactor*totalSoftScore) + 1) / 2
 
-	// Считаем бонусы только если расписание валидно (baseFitness == 1.0)
-	softSigmoid := 1.0 / (1.0 + math.Exp(-e.Context.Config.SigmoidScaleFactor*totalSoftScore))
-	totalFitness := baseFitness + (softSigmoid * e.Context.Config.SoftScoreWeight)
+	// 3. Итоговый фитнес
+	// Теперь вес бонусов - это вес нормализованного значения
+	totalFitness := baseFitness * (1.0 + (softScoreNormalized * e.Context.Config.SoftScoreWeight))
 
 	schedule.Fitness = totalFitness
 	return totalFitness
@@ -87,4 +94,63 @@ func (e *Evaluator) buildGroupDailySchedule(schedule *Schedule) {
 			schedule.GroupDailySchedule[gid][slot.Day] = append(schedule.GroupDailySchedule[gid][slot.Day], slot.PeriodNumber)
 		}
 	}
+}
+
+// DebugConflicts выводит в консоль расшифровку всех жестких конфликтов
+func DebugConflicts(schedule *Schedule, ctx *EvalContext) {
+	fmt.Println("=== ДЕБАГ ЖЕСТКИХ КОНФЛИКТОВ ===")
+	roomUsage := make(map[struct{ S, R uint }]string)
+	instructorUsage := make(map[struct{ S, I uint }]string)
+	groupUsage := make(map[struct{ S, G uint }]string)
+
+	unassigned := 0
+
+	for _, assignment := range schedule.Assignments {
+		if assignment.SlotID == 0 || assignment.RoomID == 0 {
+			unassigned++
+			continue
+		}
+
+		cls := ctx.ClassesMap[assignment.ClassID]
+		room := ctx.RoomsMap[assignment.RoomID]
+		slot := ctx.SlotsMap[assignment.SlotID]
+		dayTime := fmt.Sprintf("%s %s", slot.Day, slot.StartTime)
+
+		// 1. Вместимость
+		if room.Capacity < assignment.StudentsCount {
+			fmt.Printf("[ВМЕСТИМОСТЬ] Предмет '%s' (%d чел) не лезет в ауд. %s (%d мест)\n",
+				cls.Subject.Name, assignment.StudentsCount, room.Name, room.Capacity)
+		}
+
+		// 2. Аудитории
+		roomKey := struct{ S, R uint }{assignment.SlotID, assignment.RoomID}
+		if prev, exists := roomUsage[roomKey]; exists {
+			fmt.Printf("[АУДИТОРИЯ] Накладка в %s, ауд. %s: '%s' пересекается с '%s'\n",
+				dayTime, room.Name, prev, cls.Subject.Name)
+		}
+		roomUsage[roomKey] = cls.Subject.Name
+
+		// 3. Преподы
+		instKey := struct{ S, I uint }{assignment.SlotID, cls.InstructorID}
+		if prev, exists := instructorUsage[instKey]; exists {
+			fmt.Printf("[ПРЕПОДАВАТЕЛЬ] %s в %s ведет '%s' и '%s' одновременно!\n",
+				cls.Instructor.Name, dayTime, prev, cls.Subject.Name)
+		}
+		instructorUsage[instKey] = cls.Subject.Name
+
+		// 4. Группы
+		for _, group := range cls.Groups {
+			grpKey := struct{ S, G uint }{assignment.SlotID, group.ID}
+			if prev, exists := groupUsage[grpKey]; exists {
+				fmt.Printf("[ГРУППА] Группа %s в %s должна быть на '%s' и на '%s'\n",
+					group.Name, dayTime, prev, cls.Subject.Name)
+			}
+			groupUsage[grpKey] = cls.Subject.Name
+		}
+	}
+
+	if unassigned > 0 {
+		fmt.Printf("[ПРОПУСКИ] Не распределено занятий: %d\n", unassigned)
+	}
+	fmt.Println("=================================")
 }

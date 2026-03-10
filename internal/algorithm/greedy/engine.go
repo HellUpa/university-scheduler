@@ -17,7 +17,8 @@ type GreedyEngine struct {
 	RoomIDs []uint
 	SlotIDs []uint
 
-	Evaluator *algorithm.Evaluator
+	ClassesMap map[uint]*domain.CourseClass
+	Evaluator  *algorithm.Evaluator
 }
 
 func NewEngine(db *gorm.DB) *GreedyEngine {
@@ -53,9 +54,11 @@ func (eng *GreedyEngine) Prepare() error {
 	return nil
 }
 
-func (eng *GreedyEngine) Run() (*algorithm.Schedule, error) {
-	if err := eng.Prepare(); err != nil {
-		return nil, err
+func (eng *GreedyEngine) Run(isPrepared bool) (*algorithm.Schedule, error) {
+	if !isPrepared {
+		if err := eng.Prepare(); err != nil {
+			return nil, err
+		}
 	}
 
 	// 1. ЭВРИСТИКА: Сортируем занятия от сложных к простым.

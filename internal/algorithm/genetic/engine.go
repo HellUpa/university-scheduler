@@ -11,6 +11,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// MutationFunc - это тип для наших функций мутации (жесткой и мягкой)
+type MutationFunc func(*algorithm.Schedule, float64)
+
 type GeneticEngine struct {
 	DB             *gorm.DB
 	PopulationSize int
@@ -81,6 +84,7 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 	}
 
 	population := make([]*algorithm.Schedule, eng.PopulationSize)
+
 	for i := 0; i < eng.PopulationSize; i++ {
 		population[i] = eng.createRandomIndividual()
 	}
@@ -112,59 +116,27 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 
 		bestInd := population[0]
 
-		// === ЛОГИКА "УДАР И ВОССТАНОВЛЕНИЕ" ===
+		// === ОПРЕДЕЛЕНИЕ СТРАТЕГИИ МУТАЦИИ ===
+		var mutateToApply MutationFunc
+		var currentMutationRate float64
 
-		currentMutationRate := eng.MutationRate
-
-		// Если мы в фазе восстановления - просто уменьшаем счетчик и ничего не делаем
-		if recoveryCounter > 0 {
-			recoveryCounter--
-			stagnantGenerations = 0 // Сбрасываем стагнацию, пока восстанавливаемся
-		} else {
-			// Обычный режим: проверяем стагнацию
-			if bestInd.Fitness > bestFitnessOverall+0.001 {
-				bestFitnessOverall = bestInd.Fitness
-				stagnantGenerations = 0
-				// Сброс мутации до базовой (Остывание)
-				eng.MutationRate = 0.05
-			} else {
-				stagnantGenerations++
-			}
-
-			// Если застряли - начинаем ПЛАВНО нагревать
-			if stagnantGenerations > 5 {
-				// Каждые 5 поколений стагнации добавляем +0.01 к мутации
-				heatStep := float64(stagnantGenerations/5) * 0.01
-				currentMutationRate = 0.05 + heatStep
-
-				// Ограничитель нагрева (чтобы не сжечь всё)
-				if currentMutationRate > 0.2 {
-					currentMutationRate = 0.2
-				}
-			}
-
-			// ШОКОВАЯ ТЕРАПИЯ (Если нагрев не помог долгое время)
-			if stagnantGenerations > 40 { // Только если ОЧЕНЬ долго стоим (40 поколений)
-				currentMutationRate = 0.4 // Сильный удар
-				shockMode = true
-				stagnantGenerations = 0                                       // Сброс счетчика, чтобы начать нагрев заново
-				recoveryCounter = max(int(float64(eng.Generations)*0.05), 20) // Даем время восстановиться, 5% от общего числа поколений, если больше 20
-				log.Printf("[Gen %d] !!! SHOCK THERAPY !!!", gen)
-			}
+		// Обновляем общий лучший фитнес
+		if bestInd.Fitness > bestFitnessOverall {
+			bestFitnessOverall = bestInd.Fitness
 		}
-		// =========================================
+
+		mutateToApply, currentMutationRate, stagnantGenerations, recoveryCounter = eng.determineMutationStrategy(
+			bestInd.Fitness,
+			bestFitnessOverall,
+			stagnantGenerations,
+			recoveryCounter,
+		)
+		// =====================================
 
 		// Логирование прогресса
 		if gen%20 == 0 || gen == eng.Generations-1 {
 			log.Printf("[Gen %3d] Best Fit: %.4f | Stag: %2d | MutRate: %.3f",
 				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
-		}
-
-		// Выход, если нашли расписание без коллизий и с максимумом бонусов
-		// 1.0 = нет коллизий. 1.09+ = отличные бонусы.
-		if bestInd.Fitness > 1.09 {
-			log.Printf("Optimal solution found at generation %d!", gen)
-			break
 		}
 
 		// 3. Селекция и Скрещивание
@@ -176,11 +148,11 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 		newPop = append(newPop, population[:eliteCount]...)
 
 		for len(newPop) < eng.PopulationSize {
-			p1 := population[rand.Intn(len(population)/2)]
-			p2 := population[rand.Intn(len(population)/2)]
+			p1 := tournamentSelect(population, 3) // Турнир размером 3
+			p2 := tournamentSelect(population, 3)
 
 			child := eng.crossover(p1, p2)
-			eng.mutate(child, currentMutationRate) // Применяем обычную или шоковую мутацию
+			mutateToApply(child, currentMutationRate)
 			newPop = append(newPop, child)
 		}
 		population = newPop
@@ -191,18 +163,74 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 	return population[0], nil
 }
 
+// determineMutationStrategy анализирует прогресс и решает, какую мутацию применить.
+// Возвращает:
+// 1. mutationFn - функция мутации (eng.mutate или eng.softMutate)
+// 2. mutationRate - рассчитанный шанс мутации
+// 3. newStagnantGens - обновленный счетчик стагнации
+// 4. newRecoveryCounter - обновленный счетчик восстановления
+func (eng *GeneticEngine) determineMutationStrategy(
+	bestFitness float64,
+	bestFitnessOverall float64,
+	stagnantGens int,
+	recoveryCounter int,
+) (mutationFn MutationFunc, mutationRate float64, newStagnantGens int, newRecoveryCounter int) {
+
+	// --- Фаза 1: Оптимизация (валидное решение найдено) ---
+	if bestFitness >= 1.0 {
+		// Мы в режиме улучшения мягких ограничений.
+		// Логика нагрева/шока здесь не нужна, она слишком агрессивна.
+		// Просто используем мягкую мутацию с фиксированным шансом.
+		return eng.softMutate, 0.15, stagnantGens, recoveryCounter
+	}
+
+	// --- Фаза 2: Поиск (ищем валидное решение) ---
+	// Здесь работает твоя логика "нагрев и шок"
+
+	// Если мы в фазе восстановления после шока - ничего не делаем
+	if recoveryCounter > 0 {
+		return eng.mutate, eng.MutationRate, 0, recoveryCounter - 1
+	}
+
+	// Проверяем стагнацию
+	var isStagnating bool
+	if bestFitness > bestFitnessOverall+0.0000001 {
+		// Прогресс есть! Сбрасываем стагнацию.
+		newStagnantGens = 0
+		isStagnating = false
+	} else {
+		// Прогресса нет, увеличиваем счетчик.
+		newStagnantGens = stagnantGens + 1
+		isStagnating = true
+	}
+
+	// Расчет скорости мутации на основе стагнации
+	currentMutationRate := eng.MutationRate   // Базовая ставка
+	if isStagnating && newStagnantGens > 10 { // Нагрев
+		heatStep := float64((newStagnantGens-10)/10) * 0.01
+		currentMutationRate = eng.MutationRate + heatStep
+		if currentMutationRate > 0.15 {
+			currentMutationRate = 0.15
+		}
+	}
+
+	// ШОКОВАЯ ТЕРАПИЯ
+	if isStagnating && newStagnantGens > 80 {
+		log.Printf("!!! SHOCK THERAPY (Hard search) !!!")
+		return eng.mutate, 0.3, 0, max(int(float64(eng.Generations)*0.05), 20)
+	}
+
+	return eng.mutate, currentMutationRate, newStagnantGens, 0
+}
+
 // Вспомогательные методы (crossover, mutate, createRandomIndividual)
 
 // createRandomIndividual создает случайную хромосому
 func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
-	genes := make([]*algorithm.Assignment, len(eng.Classes))
+	assignments := make([]*algorithm.Assignment, len(eng.Classes))
 
 	for i, cls := range eng.Classes {
-		// Случайная аудитория и слот
-		rndRoom := eng.RoomIDs[rand.Intn(len(eng.RoomIDs))]
-		rndSlot := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
-
-		// Собираем данные по группам
+		// Считаем размер группы ДО выбора аудитории
 		var groupIDs []uint
 		studentsCount := 0
 		for _, g := range cls.Groups {
@@ -210,17 +238,37 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 			studentsCount += g.Size
 		}
 
-		genes[i] = &algorithm.Assignment{
+		// === ЭВРИСТИКА ВМЕСТИМОСТИ ===
+		// Собираем список только тех аудиторий, куда влезает эта толпа
+		var validRooms []uint
+		for _, roomID := range eng.RoomIDs {
+			room := eng.Evaluator.Context.RoomsMap[roomID]
+			if room.Capacity >= studentsCount {
+				validRooms = append(validRooms, roomID)
+			}
+		}
+
+		// Если вдруг (баг данных) нет ни одной такой аудитории, берем любую (чтобы не упасть)
+		var rndRoom uint
+		if len(validRooms) > 0 {
+			rndRoom = validRooms[rand.Intn(len(validRooms))]
+		} else {
+			rndRoom = eng.RoomIDs[rand.Intn(len(eng.RoomIDs))]
+		}
+		// =============================
+
+		rndSlot := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+
+		assignments[i] = &algorithm.Assignment{
 			ClassID:       cls.ID,
-			RoomID:        rndRoom,
+			RoomID:        rndRoom, // Теперь это гарантированно подходящая аудитория!
 			SlotID:        rndSlot,
 			InstructorID:  cls.InstructorID,
 			GroupIDs:      groupIDs,
 			StudentsCount: studentsCount,
 		}
 	}
-
-	return algorithm.NewSchedule(genes)
+	return algorithm.NewSchedule(assignments)
 }
 
 func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule) *algorithm.Schedule {
@@ -249,14 +297,76 @@ func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule) *algorithm.Sched
 }
 
 // mutate случайным образом изменяет гены с заданным шансом (rate)
-func (eng *GeneticEngine) mutate(ind *algorithm.Schedule, rate float64) {
-	for _, gene := range ind.Assignments {
+func (eng *GeneticEngine) mutate(schedule *algorithm.Schedule, rate float64) {
+	for _, assignment := range schedule.Assignments {
 		if rand.Float64() < rate {
 			if rand.Float64() < 0.5 {
-				gene.SlotID = eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+				assignment.SlotID = eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
 			} else {
-				gene.RoomID = eng.RoomIDs[rand.Intn(len(eng.RoomIDs))]
+				// === МУТИРУЕМ ТОЛЬКО В ПОДХОДЯЩИЕ АУДИТОРИИ ===
+				var validRooms []uint
+				for _, roomID := range eng.RoomIDs {
+					if eng.Evaluator.Context.RoomsMap[roomID].Capacity >= assignment.StudentsCount {
+						validRooms = append(validRooms, roomID)
+					}
+				}
+				if len(validRooms) > 0 {
+					assignment.RoomID = validRooms[rand.Intn(len(validRooms))]
+				}
 			}
 		}
 	}
+}
+
+// softMutate пытается переместить одно случайное занятие в новый случайный слот,
+// но только если это не создает жестких конфликтов.
+func (eng *GeneticEngine) softMutate(schedule *algorithm.Schedule, rate float64) {
+	if rand.Float64() >= rate {
+		return // Мутация не сработала по вероятности
+	}
+
+	// 1. Выбираем случайное занятие для перемещения
+	if len(schedule.Assignments) == 0 {
+		return
+	}
+	assignIndex := rand.Intn(len(schedule.Assignments))
+	assignToMove := schedule.Assignments[assignIndex]
+
+	// 2. Сохраняем его текущее положение, чтобы можно было откатиться
+	originalSlotID := assignToMove.SlotID
+
+	// 3. Выбираем новый случайный слот
+	targetSlotID := eng.SlotIDs[rand.Intn(len(eng.SlotIDs))]
+
+	if originalSlotID == targetSlotID {
+		return // Перемещать в то же место нет смысла
+	}
+
+	// 4. Временно перемещаем занятие
+	assignToMove.SlotID = targetSlotID
+
+	// 5. Проверяем, не сломали ли мы всё (жесткие ограничения)
+	hardConflicts, _ := eng.Evaluator.CountConflicts(schedule) // Считает и жесткие, и мягкие
+
+	// 6. Принимаем решение
+	if hardConflicts > 0 {
+		// Перемещение создало конфликт! Откатываемся.
+		assignToMove.SlotID = originalSlotID
+	}
+	// Если hardConflicts == 0, то ничего не делаем, оставляя занятие на новом месте.
+	// Изменение принято!
+}
+
+func tournamentSelect(population []*algorithm.Schedule, k int) *algorithm.Schedule {
+	// Выбираем первого участника как текущего победителя
+	best := population[rand.Intn(len(population))]
+
+	// Проводим турнир
+	for i := 1; i < k; i++ {
+		contender := population[rand.Intn(len(population))]
+		if contender.Fitness > best.Fitness {
+			best = contender
+		}
+	}
+	return best
 }

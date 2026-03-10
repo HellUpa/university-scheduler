@@ -64,6 +64,8 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// algorithm.DebugConflicts(bestSchedule, engine.Evaluator.Context)
+
 	duration := time.Since(startTime)
 
 	// Формируем красивый ответ
@@ -86,7 +88,7 @@ func (h *Handler) GenerateScheduleGreedy(c *fiber.Ctx) error {
 	engine := greedy.NewEngine(h.DB)
 
 	startTime := time.Now()
-	bestSchedule, err := engine.Run()
+	bestSchedule, err := engine.Run(false)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}

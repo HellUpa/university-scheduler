@@ -12,7 +12,7 @@ type EvaluatorConfig struct {
 	PenaltyWrongRoomType float64
 	BonusPerfectRoomType float64
 	BonusDayWithoutGaps  float64
-	SigmoidScaleFactor   float64
+	TanhScaleFactor      float64
 	SoftScoreWeight      float64
 }
 
@@ -22,7 +22,7 @@ var DefaultConfig = EvaluatorConfig{
 	PenaltyWrongRoomType: -10.0,
 	BonusPerfectRoomType: +5.0,
 	BonusDayWithoutGaps:  +50.0,
-	SigmoidScaleFactor:   0.01,
+	TanhScaleFactor:      0.005,
 	SoftScoreWeight:      0.5,
 }
 
@@ -149,4 +149,20 @@ func RuleGaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 		}
 	}
 	return 0, softScore
+}
+
+// RuleCompactness награждает за то, что занятия стоят в начале дня
+func RuleCompactness(schedule *Schedule, ctx *EvalContext) (int, float64) {
+	bonus := 0.0
+	for _, assignment := range schedule.Assignments {
+		if assignment.SlotID == 0 {
+			continue
+		}
+
+		slot := ctx.SlotsMap[assignment.SlotID]
+		// Чем меньше номер периода (1, 2, 3...), тем больше бонус
+		// Например: 10 - номер периода. Пара в 08:00 (1) даст +9 баллов.
+		bonus += float64(11-slot.PeriodNumber) * 0.5
+	}
+	return 0, bonus
 }

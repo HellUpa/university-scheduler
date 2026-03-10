@@ -154,10 +154,12 @@
             if (!matrix[item.day]) matrix[item.day] = {};
             if (!matrix[item.day][item.time]) matrix[item.day][item.time] = {};
 
-            // item.groups уже является массивом ["CS-101", "CS-102"]
             item.groups.forEach(g => {
                 groupsSet.add(g);
-                matrix[item.day][item.time][g] = item; 
+                if (!matrix[item.day][item.time][g]) {
+                    matrix[item.day][item.time][g] = []; // Создаем массив
+                }
+                matrix[item.day][item.time][g].push(item); // Добавляем в массив!
             });
         });
 
@@ -199,26 +201,35 @@
 
                 // Колонки групп
                 groups.forEach(group => {
-                    const item = matrix[day][time][group];
-                    if (item) {
-                        // Есть пара!
-                        // Если это лекция (много групп), можно подсветить другим цветом
-                        const isLecture = item.groups.includes(',');
-                        const bgClass = isLecture ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200';
+                    const items = matrix[day][time][group];
+                    if (items && items.length > 0) {
+                        bodyHTML += `<td class="p-2 border-r border-gray-200 align-top w-48 min-w-[12rem]">`;
                         
-                        bodyHTML += `
-                            <td class="p-2 border-r border-gray-200 align-top w-48 min-w-[12rem]">
-                                <div class="${bgClass} border rounded-md p-2 h-full shadow-sm flex flex-col justify-between">
+                        // Если в ячейке больше 1 занятия - это КОЛЛИЗИЯ! Подсветим красным!
+                        const isCollision = items.length > 1;
+                        if (isCollision) {
+                            bodyHTML += `<div class="text-xs font-bold text-red-600 mb-1 text-center bg-red-100 rounded">КОЛЛИЗИЯ!</div>`;
+                        }
+
+                        // Рисуем все карточки, которые попали в этот слот
+                        items.forEach(item => {
+                            const isLecture = item.groups.length > 1;
+                            // Если коллизия - рамка красная
+                            const bgClass = isCollision ? 'bg-red-50 border-red-300' : (isLecture ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200');
+                            
+                            bodyHTML += `
+                                <div class="${bgClass} border rounded-md p-2 h-full shadow-sm flex flex-col justify-between mb-1">
                                     <div class="font-bold text-gray-800 text-[13px] leading-tight mb-1">${item.subject}</div>
                                     <div class="text-xs text-gray-600 mb-2">${item.instructor}</div>
                                     <div class="text-[11px] font-mono bg-white px-1.5 py-0.5 rounded text-gray-500 inline-block self-start border border-gray-100">
                                         📍 ${item.room}
                                     </div>
                                 </div>
-                            </td>
-                        `;
+                            `;
+                        });
+                        bodyHTML += `</td>`;
                     } else {
-                        // Окно (пусто)
+                        // Окно
                         bodyHTML += `<td class="p-2 border-r border-gray-100 bg-gray-50/50"></td>`;
                     }
                 });
