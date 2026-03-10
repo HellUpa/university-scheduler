@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 
@@ -59,7 +60,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	engine.MutationRate = req.MutationRate
 
 	startTime := time.Now()
-	bestSchedule, err := engine.Run()
+	bestSchedule, err := engine.Run(nil)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -78,6 +79,45 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 		"time_taken_ms": duration.Milliseconds(),
 		"parameters":    req,
 		"schedule":      result,
+	})
+}
+
+func (h *Handler) EvolutionWS(c *websocket.Conn) {
+	// 1. Читаем параметры (клиент пришлет их первым сообщением)
+	var req GenerateRequest
+	if err := c.ReadJSON(&req); err != nil {
+		return
+	}
+
+	startTime := time.Now()
+
+	engine := genetic.NewEngine(h.DB)
+	engine.PopulationSize = req.PopulationSize
+	engine.Generations = req.Generations
+	engine.MutationRate = req.MutationRate
+
+	// 2. Определяем функцию прогресса, которая будет слать данные в сокет
+	onProgress := func(gen int, fitness float64, mutRate float64) {
+		payload := fiber.Map{
+			"type":    "progress",
+			"gen":     gen,
+			"fitness": fitness,
+			"mutRate": mutRate,
+		}
+		_ = c.WriteJSON(payload) // Отправляем в браузер
+	}
+
+	// 3. Запускаем алгоритм
+	bestSchedule, _ := engine.Run(onProgress)
+
+	duration := time.Since(startTime)
+
+	// 4. Шлем финальный результат
+	_ = c.WriteJSON(fiber.Map{
+		"type":          "final",
+		"schedule":      h.formatScheduleResponse(bestSchedule, engine.Evaluator),
+		"fitness":       bestSchedule.Fitness,
+		"time_taken_ms": duration.Milliseconds(),
 	})
 }
 

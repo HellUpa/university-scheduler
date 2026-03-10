@@ -14,6 +14,9 @@ import (
 // MutationFunc - это тип для наших функций мутации (жесткой и мягкой)
 type MutationFunc func(*algorithm.Schedule, float64)
 
+// Для callback
+type ProgressFunc func(gen int, fitness float64, mutRate float64)
+
 type GeneticEngine struct {
 	DB             *gorm.DB
 	PopulationSize int
@@ -79,7 +82,7 @@ func (eng *GeneticEngine) Prepare() error {
 	return nil
 }
 
-func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
+func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, error) {
 	if err := eng.Prepare(); err != nil {
 		return nil, err
 	}
@@ -133,6 +136,10 @@ func (eng *GeneticEngine) Run() (*algorithm.Schedule, error) {
 			recoveryCounter,
 		)
 		// =====================================
+
+		if onProgress != nil {
+			onProgress(gen, bestInd.Fitness, currentMutationRate)
+		}
 
 		// Логирование прогресса
 		if gen%20 == 0 || gen == eng.Generations-1 {

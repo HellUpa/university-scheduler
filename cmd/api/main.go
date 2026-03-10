@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -48,6 +49,7 @@ func main() {
 	api.Get("/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok"}) })
 	api.Post("/schedule/generate/genetic", handler.GenerateScheduleGenetic)
 	api.Post("/schedule/generate/greedy", handler.GenerateScheduleGreedy)
+	app.Get("/schedule/generate/genetic/ws", websocket.New(handler.EvolutionWS))
 
 	log.Printf("Starting server on port %s...", cfg.ServerPort)
 	if err := app.Listen(":" + cfg.ServerPort); err != nil {

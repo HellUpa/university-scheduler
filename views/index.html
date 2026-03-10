@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UCTTP Scheduler AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .loader { border-top-color: #4f46e5; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
         @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -72,6 +73,10 @@
         <p class="text-gray-500 font-medium animate-pulse text-lg" id="loadingText">Оптимизация расписания...</p>
     </div>
 
+    <div id="chartContainer" class="hidden bg-white p-4 rounded-xl shadow-sm mb-6 border border-gray-100">
+        <canvas id="fitnessChart" height="100"></canvas>
+    </div>
+
     <!-- Matrix Schedule Table -->
     <div id="scheduleContainer" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden table-container overflow-x-auto">
         <table class="w-full text-left border-collapse min-w-[800px]">
@@ -92,53 +97,129 @@
     };
     const daysOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
+    let fitnessChart;
+
+    // Инициализация графика (вынеси в отдельную функцию)
+    function initChart() {
+        const chartCont = document.getElementById('chartContainer');
+        chartCont.classList.remove('hidden');
+        const ctx = document.getElementById('fitnessChart').getContext('2d');
+
+        if (fitnessChart) fitnessChart.destroy();
+
+        fitnessChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Лучший Фитнес (Best Fitness)',
+                    data: [],
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false, // Отключаем анимацию для скорости
+                scales: {
+                    y: { beginAtZero: false, grid: { color: '#f1f5f9' } },
+                    x: { display: false }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
     async function generateSchedule(type) {
         const loader = document.getElementById('loader');
         const container = document.getElementById('scheduleContainer');
         const stats = document.getElementById('statsPanel');
         const loadingText = document.getElementById('loadingText');
 
-        // Читаем параметры из инпутов
-        const popSize = parseInt(document.getElementById('popSize').value) || 200;
-        const genCount = parseInt(document.getElementById('genCount').value) || 200;
-        const mutRate = parseFloat(document.getElementById('mutRate').value) || 0.05;
-
+        // UI Reset
         loader.classList.remove('hidden');
         container.classList.add('hidden');
         stats.classList.add('hidden');
-        loadingText.innerText = type === 'genetic' ? '🧬 Идет процесс эволюции (AI)...' : '⚡ Работает жадный алгоритм...';
+        document.getElementById('chartContainer').classList.add('hidden');
 
-        try {
-            const endpoint = type === 'genetic' ? '/api/v1/schedule/generate/genetic' : '/api/v1/schedule/generate/greedy';
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ population_size: popSize, generations: genCount, mutation_rate: mutRate })
-            });
+        // Собираем параметры из инпутов
+        const params = {
+            population_size: parseInt(document.getElementById('popSize').value) || 200,
+            generations: parseInt(document.getElementById('genCount').value) || 200,
+            mutation_rate: parseFloat(document.getElementById('mutRate').value) || 0.05,
+        };
 
-            const data = await response.json();
+        // --- ЛОГИКА ДЛЯ ЖАДНОГО АЛГОРИТМА (Через FETCH) ---
+        if (type === 'greedy') {
+            loadingText.innerText = '⚡ Работает жадный алгоритм...';
+            try {
+                const response = await fetch('/api/v1/schedule/generate/greedy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params)
+                });
+                const data = await response.json();
 
-            if (data.status !== 'success') {
-                alert('Ошибка генерации: ' + data.error);
-                return;
+                // Обновляем статы и рендерим
+                document.getElementById('statFitness').innerText = data.fitness_score.toFixed(4);
+                document.getElementById('statFitness').className = `text-3xl font-extrabold mt-1 ${data.fitness_score >= 1.0 ? 'text-green-600' : 'text-red-500'}`;
+                document.getElementById('statTime').innerText = `${data.time_taken_ms} мс`;
+                document.getElementById('statAlgo').innerText = "Greedy";
+                renderMatrix(data.schedule);
+
+                loader.classList.add('hidden');
+                container.classList.remove('hidden');
+                stats.classList.remove('hidden');
+            } catch (e) { alert("Ошибка: " + e); }
+            return;
+        }
+
+        // --- ЛОГИКА ДЛЯ ГЕНЕТИКИ (Через WEBSOCKET) ---
+        initChart();
+        loadingText.innerText = '🧬 Инициализация эволюции...';
+
+        // Определяем протокол (ws или wss)
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${window.location.host}/schedule/generate/genetic/ws`);
+
+        socket.onopen = () => {
+            socket.send(JSON.stringify(params));
+        };
+
+        socket.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === 'progress') {
+                loadingText.innerText = `🧬 Поколение ${msg.gen}: Фитнес ${msg.fitness.toFixed(4)}`;
+                document.getElementById('statFitness').innerText = msg.fitness.toFixed(4);
+
+                // Обновляем график
+                fitnessChart.data.labels.push(msg.gen);
+                fitnessChart.data.datasets[0].data.push(msg.fitness);
+                fitnessChart.update('none'); // Быстрое обновление без анимации
             }
 
-            // Обновляем статистику
-            document.getElementById('statFitness').innerText = data.fitness_score.toFixed(4);
-            document.getElementById('statFitness').className = `text-3xl font-extrabold mt-1 ${data.fitness_score >= 1.0 ? 'text-green-600' : 'text-red-500'}`;
-            document.getElementById('statTime').innerText = `${data.time_taken_ms} мс`;
-            document.getElementById('statAlgo').innerText = data.algorithm;
+            if (msg.type === 'final') {
+                document.getElementById('statTime').innerText = `${msg.time_taken_ms} мс`;
+                document.getElementById('statAlgo').innerText = "Genetic";
+                renderMatrix(msg.schedule);
 
-            renderMatrix(data.schedule);
+                loader.classList.add('hidden');
+                container.classList.remove('hidden');
+                stats.classList.remove('hidden');
+                socket.close();
+            }
+        };
 
-            stats.classList.remove('hidden');
-            container.classList.remove('hidden');
-
-        } catch (error) {
-            alert('Ошибка сети или сервера: ' + error);
-        } finally {
+        socket.onerror = (err) => {
+            alert("WebSocket error: " + err);
             loader.classList.add('hidden');
-        }
+        };
     }
 
     function renderMatrix(scheduleItems) {
