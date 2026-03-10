@@ -68,7 +68,7 @@ func Seed(db *gorm.DB) {
 		{Name: "Л-102", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
 		{Name: "Л-103", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 1},
 		{Name: "Л-104", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 2},
-		{Name: "Л-105", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 2},
+		// {Name: "Л-105", Capacity: 100, Type: domain.RoomTypeLecture, Floor: 2},
 
 		// Практические (10 штук)
 		{Name: "П-201", Capacity: 30, Type: domain.RoomTypePractice, Floor: 2},
@@ -79,8 +79,8 @@ func Seed(db *gorm.DB) {
 		{Name: "П-206", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
 		{Name: "П-207", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
 		{Name: "П-208", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
-		{Name: "П-209", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
-		{Name: "П-210", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		// {Name: "П-209", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
+		// {Name: "П-210", Capacity: 30, Type: domain.RoomTypePractice, Floor: 3},
 
 		// Лабораторные (10 штук)
 		{Name: "301-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 3},
@@ -91,8 +91,8 @@ func Seed(db *gorm.DB) {
 		{Name: "306-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
 		{Name: "307-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
 		{Name: "308-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
-		{Name: "309-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
-		{Name: "310-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		// {Name: "309-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
+		// {Name: "310-Лаб", Capacity: 30, Type: domain.RoomTypeLab, Floor: 4},
 	}
 	db.Create(&rooms)
 

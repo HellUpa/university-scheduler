@@ -3,6 +3,7 @@ package genetic
 import (
 	"log"
 	"math/rand"
+	"runtime"
 	"scheduler/internal/algorithm"
 	"scheduler/internal/domain"
 	"sort"
@@ -104,10 +105,17 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 	for gen := 0; gen < eng.Generations; gen++ {
 		// 1. Оценка популяции (Параллельно)
 		var wg sync.WaitGroup
-		wg.Add(len(population))
+		numCPUs := runtime.NumCPU()
+		sem := make(chan struct{}, numCPUs*2)
+
 		for _, ind := range population {
+			wg.Add(1)
+
+			// Захватываем слот в семафоре
+			sem <- struct{}{}
 			go func(individual *algorithm.Schedule) {
 				defer wg.Done()
+				defer func() { <-sem }()
 				eng.Evaluator.CalculateFitness(individual)
 			}(ind)
 		}
