@@ -205,6 +205,7 @@
             }
 
             if (msg.type === 'final') {
+                document.getElementById('statFitness').className = `text-3xl font-extrabold mt-1 ${msg.fitness >= 1.0 ? 'text-green-600' : 'text-red-500'}`;
                 document.getElementById('statTime').innerText = `${msg.time_taken_ms} мс`;
                 document.getElementById('statAlgo').innerText = "Genetic";
                 renderMatrix(msg.schedule);
