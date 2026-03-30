@@ -34,6 +34,11 @@ const params = reactive({
 })
 
 const isSettingsOpen = ref(false) // Состояние боковой панели
+const expandedSections = reactive({
+  main: true,      // Базовые открыты по умолчанию
+  advanced: false, // Продвинутые скрыты
+  rules: false     // Правила скрыты
+})
 const isGenerating = ref(false)
 const loadingText = ref('Оптимизация расписания...')
 const rawSchedule = ref<ScheduleItem[]>([])
@@ -126,7 +131,7 @@ const scheduleMatrix = computed(() => {
   <div class="bg-gray-50 min-h-screen text-gray-800 font-sans pb-10 relative overflow-x-hidden">
     
     <!-- Главный контейнер -->
-    <div class="mx-auto px-4 py-8 max-w-[1400px] transition-all duration-300" :class="{ 'pr-96': isSettingsOpen }">
+    <div class="mx-auto px-4 py-8 w-[96%] max-w-[1600px] transition-all duration-300" :class="{ 'pr-96': isSettingsOpen }">
       
       <!-- Header -->
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 gap-4">
@@ -237,12 +242,29 @@ const scheduleMatrix = computed(() => {
       </div>
 
       <!-- Контент сайдбара (скроллится если много настроек) -->
-      <div class="p-5 overflow-y-auto flex-1 space-y-6">
+      <div class="p-5 overflow-y-auto flex-1 space-y-2">
         
         <!-- Секция 1: Базовые настройки -->
-        <div>
-          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wider border-b pb-2 mb-4">Базовые параметры</h3>
-          <div class="space-y-4">
+        <div class="border-b border-gray-100 pb-2">
+          <button 
+            @click="expandedSections.main = !expandedSections.main" 
+            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+          >
+            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                  :class="expandedSections.main ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+              Базовые параметры
+            </span>
+            <!-- Иконка стрелочки (крутится при открытии) -->
+            <svg xmlns="http://www.w3.org/2000/svg" 
+                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                 :class="{ 'rotate-180': expandedSections.main }" 
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <!-- Контент скрывается/показывается -->
+          <div v-show="expandedSections.main" class="space-y-4 pt-2 pb-4">
             <SettingInput 
               v-model="params.main_options.population_size" 
               label="Размер популяции" 
@@ -265,9 +287,24 @@ const scheduleMatrix = computed(() => {
         </div>
 
         <!-- Секция 2: Продвинутые настройки -->
-        <div>
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2 mb-4">Продвинутые</h3>
-          <div class="space-y-4 opacity-75 focus-within:opacity-100 transition-opacity">        
+        <div class="border-b border-gray-100 pb-2">
+          <button 
+            @click="expandedSections.advanced = !expandedSections.advanced" 
+            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+          >
+            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                  :class="expandedSections.advanced ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+              Продвинутые
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" 
+                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                 :class="{ 'rotate-180': expandedSections.advanced }" 
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">        
             <SettingInput 
               v-model="params.additional_options.elitism" 
               label="Элитизм"
@@ -330,15 +367,31 @@ const scheduleMatrix = computed(() => {
               v-model="params.additional_options.shock_recovery_scale" 
               label="Кол-во поколений после шока (в процентах)"
               step="0.01" 
-              tooltip="Настраивает время восстановления в процентах от числа кол-ва поколений, не применяется если полученное число меньше предыдущего параметра" 
+              tooltip="Настраивает время восстановления в процентах от кол-ва поколений, не применяется если полученное число меньше предыдущего параметра" 
             />
 
           </div>
         </div>
 
         <!-- Секция 3: Правила (Заглушка) -->
-        <div>
-          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2 mb-4">Правила / Ограничения</h3>
+        <div class="pb-2">
+          <button 
+            @click="expandedSections.rules = !expandedSections.rules" 
+            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+          >
+            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                  :class="expandedSections.rules ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+              Правила / Ограничения
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" 
+                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                 :class="{ 'rotate-180': expandedSections.rules }" 
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          <div v-show="expandedSections.rules" class="pt-2 pb-4">
           <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-400">
             Модуль правил в разработке...
           </div>
@@ -355,4 +408,5 @@ const scheduleMatrix = computed(() => {
 
     </div>
   </div>
+</div>
 </template>

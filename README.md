@@ -16,7 +16,7 @@
 
 - **Backend:** Go 1.22+ (Fiber v2)
 - **Database:** PostgreSQL 17 + GORM (ORM)
-- **Frontend:** Vanilla JS + Tailwind CSS (Server-Side Rendering через Go Templates)
+- **Frontend:** Vue.js + Tailwind CSS
 - **DevOps:** Docker, Docker Compose
 - **Config:** Viper (управление окружением)
 
@@ -37,7 +37,7 @@
 
 ## 🖥 Использование
 
-После запуска система доступна по адресу: **[http://localhost:8080](http://localhost:8080)**
+После запуска система доступна по адресу: **[http://localhost:5173](http://localhost:5173)**
 
 ### Веб-интерфейс позволяет:
 - Настраивать гиперпараметры (размер популяции, количество поколений, шанс мутации).
