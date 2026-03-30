@@ -44,7 +44,6 @@ func LoadConfig(path string) (config Config, err error) {
 
 	err = viper.ReadInConfig()
 	if err != nil {
-		// Если файла .env нет, но есть системные переменные, это нормально для продакшна
 		log.Println("No .env file found, relying on environment variables")
 	}
 

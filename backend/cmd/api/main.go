@@ -5,9 +5,9 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/template/html/v2"
 
 	"scheduler/internal/config"
 	"scheduler/internal/database"
@@ -23,25 +23,16 @@ func main() {
 	db := database.NewConnection(cfg.GetDSN())
 	database.Seed(db)
 
-	// Инициализируем движок шаблонов (указываем папку views и расширение файлов)
-	engine := html.New("./views", ".html")
+	app := fiber.New()
 
-	// Передаем движок в конфигурацию Fiber
-	app := fiber.New(fiber.Config{
-		AppName: "UCTTP Scheduler API",
-		Views:   engine, // <--- ПОДКЛЮЧАЕМ VIEWS
-	})
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "http://localhost:5173", // Указываем порт Vite (фронтенда)
+		AllowHeaders: "Origin, Content-Type, Accept",
+		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
+	}))
 
 	app.Use(logger.New())
 	app.Use(recover.New())
-
-	// ==========================================
-	// UI ЭНДПОИНТ (Главная страница)
-	// ==========================================
-	app.Get("/", func(c *fiber.Ctx) error {
-		// Рендерим файл views/index.html
-		return c.Render("index", fiber.Map{})
-	})
 
 	// API ЭНДПОИНТЫ
 	handler := transport.NewHandler(db)
@@ -49,7 +40,7 @@ func main() {
 	api.Get("/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok"}) })
 	api.Post("/schedule/generate/genetic", handler.GenerateScheduleGenetic)
 	api.Post("/schedule/generate/greedy", handler.GenerateScheduleGreedy)
-	app.Get("/schedule/generate/genetic/ws", websocket.New(handler.EvolutionWS))
+	api.Get("/schedule/generate/genetic/ws", websocket.New(handler.EvolutionWS))
 
 	log.Printf("Starting server on port %s...", cfg.ServerPort)
 	if err := app.Listen(":" + cfg.ServerPort); err != nil {

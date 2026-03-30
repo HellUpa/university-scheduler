@@ -1,0 +1,300 @@
+<script setup lang="ts">
+import { ref, reactive, computed, shallowRef } from 'vue'
+import { Chart, registerables } from 'chart.js'
+
+Chart.register(...registerables)
+
+// Укажи здесь адрес твоего Fiber бэкенда!
+const API_BASE_URL = 'http://localhost:8080'
+const WS_BASE_URL = 'ws://localhost:8080'
+
+interface ScheduleItem {
+  subject: string; instructor: string; room: string; day: string; time: string; groups: string[]
+}
+
+const params = reactive({
+  population_size: 200,
+  generations: 500,
+  mutation_rate: 0.001,
+  elitism: 2, // Продвинутая настройка (для примера)
+})
+
+const isSettingsOpen = ref(false) // Состояние боковой панели
+const isGenerating = ref(false)
+const loadingText = ref('Оптимизация расписания...')
+const rawSchedule = ref<ScheduleItem[]>([])
+const stats = reactive({ fitness: 0, time: 0, algo: '', show: false })
+
+const chartCanvas = ref<HTMLCanvasElement | null>(null)
+const chartInstance = shallowRef<Chart | null>(null)
+
+const initChart = () => {
+  if (chartInstance.value) chartInstance.value.destroy()
+  if (!chartCanvas.value) return
+  chartInstance.value = new Chart(chartCanvas.value, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Best Fitness', data: [], borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.1)', borderWidth: 2, fill: true, tension: 0.3, pointRadius: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { y: { beginAtZero: false, grid: { color: '#f1f5f9' } }, x: { display: false } }, plugins: { legend: { display: false } } }
+  })
+}
+
+const generateGreedy = async () => {
+  isGenerating.value = true; stats.show = false; rawSchedule.value = []
+  loadingText.value = '⚡ Работает жадный алгоритм...'
+  isSettingsOpen.value = false // Закрываем настройки при старте
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/schedule/generate/greedy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    const data = await response.json()
+    stats.fitness = data.fitness_score; stats.time = data.time_taken_ms; stats.algo = 'Greedy'; stats.show = true
+    rawSchedule.value = data.schedule
+  } catch (e) { alert("Ошибка: " + e) } 
+  finally { isGenerating.value = false }
+}
+
+const generateGenetic = () => {
+  isGenerating.value = true; stats.show = false; rawSchedule.value = []
+  loadingText.value = '🧬 Инициализация эволюции...'
+  isSettingsOpen.value = false
+  
+  setTimeout(() => initChart(), 0)
+
+  const socket = new WebSocket(`${WS_BASE_URL}/api/v1/schedule/generate/genetic/ws`)
+
+  socket.onopen = () => socket.send(JSON.stringify(params))
+  socket.onmessage = (event) => {
+    const msg = JSON.parse(event.data)
+    if (msg.type === 'progress') {
+      loadingText.value = `🧬 Поколение ${msg.gen}: Фитнес ${msg.fitness.toFixed(4)}`
+      stats.fitness = msg.fitness
+      if (chartInstance.value) {
+        chartInstance.value.data.labels?.push(msg.gen)
+        chartInstance.value.data.datasets[0].data.push(msg.fitness)
+        chartInstance.value.update('none')
+      }
+    }
+    if (msg.type === 'final') {
+      stats.fitness = msg.fitness; stats.time = msg.time_taken_ms; stats.algo = 'Genetic'; stats.show = true
+      rawSchedule.value = msg.schedule; isGenerating.value = false
+      socket.close()
+    }
+  }
+  socket.onerror = (err) => { alert("WebSocket error"); console.error(err); isGenerating.value = false }
+}
+
+const daysOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+const dayTranslations: Record<string, string> = { "monday": "Понедельник", "tuesday": "Вторник", "wednesday": "Среда", "thursday": "Четверг", "friday": "Пятница", "saturday": "Суббота" }
+
+const scheduleMatrix = computed(() => {
+  if (rawSchedule.value.length === 0) return null
+  const groupsSet = new Set<string>(); const timesSet = new Set<string>()
+  const matrix: Record<string, Record<string, Record<string, ScheduleItem[]>>> = {}
+
+  rawSchedule.value.forEach(item => {
+    timesSet.add(item.time)
+    if (!matrix[item.day]) matrix[item.day] = {}
+    if (!matrix[item.day][item.time]) matrix[item.day][item.time] = {}
+    item.groups.forEach(g => {
+      groupsSet.add(g)
+      if (!matrix[item.day][item.time][g]) matrix[item.day][item.time][g] = []
+      matrix[item.day][item.time][g].push(item)
+    })
+  })
+  return { groups: Array.from(groupsSet).sort(), times: Array.from(timesSet).sort(), data: matrix }
+})
+</script>
+
+<template>
+  <div class="bg-gray-50 min-h-screen text-gray-800 font-sans pb-10 relative overflow-x-hidden">
+    
+    <!-- Главный контейнер -->
+    <div class="mx-auto px-4 py-8 max-w-[1400px] transition-all duration-300" :class="{ 'pr-96': isSettingsOpen }">
+      
+      <!-- Header -->
+      <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 gap-4">
+        <div>
+          <h1 class="text-3xl font-extrabold text-indigo-600 tracking-tight">AI Scheduler</h1>
+          <p class="text-sm text-gray-500 mt-1">Матричное расписание с применением ГА</p>
+        </div>
+        
+        <div class="flex gap-3 items-center">
+          <button @click="generateGreedy" :disabled="isGenerating" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg shadow-sm disabled:opacity-50">
+            ⚡ Жадный
+          </button>
+          <button @click="generateGenetic" :disabled="isGenerating" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm disabled:opacity-50">
+            🧬 Генетический
+          </button>
+          
+          <!-- Кнопка Настроек (Шестеренка) -->
+          <button @click="isSettingsOpen = true" class="p-2.5 bg-white border border-gray-200 hover:bg-gray-100 text-gray-600 rounded-lg shadow-sm transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.559.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.894.149c-.424.07-.764.383-.929.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 0 1-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.398.165-.71.505-.78.929l-.15.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 0 1-.12-1.45l.527-.737c.25-.35.272-.806.108-1.204-.165-.397-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Stats Panel -->
+      <div v-if="stats.show" class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- ... (Твой старый блок со статистикой, без изменений) ... -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Фитнес-оценка</p>
+          <p :class="['text-3xl font-extrabold mt-1', stats.fitness >= 1.0 ? 'text-green-600' : 'text-red-500']">{{ stats.fitness.toFixed(4) }}</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Время генерации</p>
+          <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ stats.time }} мс</p>
+        </div>
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Алгоритм</p>
+          <p class="text-3xl font-extrabold text-indigo-600 mt-1">{{ stats.algo }}</p>
+        </div>
+      </div>
+
+      <!-- Loading & Chart -->
+      <div v-show="isGenerating" class="flex flex-col items-center py-10 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+        <div class="loader ease-linear rounded-full border-4 border-gray-200 h-16 w-16 mb-6"></div>
+        <p class="text-gray-500 font-medium animate-pulse text-lg mb-6">{{ loadingText }}</p>
+        <div class="w-full max-w-4xl px-4 h-[200px]" :class="{ 'hidden': loadingText.includes('Жадный') }">
+          <canvas ref="chartCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Matrix Table -->
+      <div v-if="scheduleMatrix && !isGenerating" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden table-container overflow-x-auto">
+         <table class="w-full text-left border-collapse min-w-[800px]">
+          <thead class="bg-gray-100 text-gray-700 text-sm tracking-wider border-b-2 border-gray-300">
+            <tr>
+              <th class="p-4 w-32 border-r border-gray-200 bg-gray-100 sticky left-0 z-10">Время</th>
+              <th v-for="group in scheduleMatrix.groups" :key="group" class="p-4 border-r border-gray-200 text-center font-bold text-indigo-900">{{ group }}</th>
+            </tr>
+          </thead>
+          <tbody class="text-sm divide-y divide-gray-200">
+            <template v-for="day in daysOrder" :key="day">
+              <template v-if="scheduleMatrix.data[day]">
+                <tr class="bg-indigo-50 border-y-2 border-indigo-100">
+                  <td :colspan="scheduleMatrix.groups.length + 1" class="p-3 text-center font-bold text-indigo-700 uppercase tracking-widest sticky left-0">{{ dayTranslations[day] || day }}</td>
+                </tr>
+                <tr v-for="time in scheduleMatrix.times" :key="time" class="hover:bg-gray-50 transition-colors">
+                  <template v-if="scheduleMatrix.data[day][time]">
+                    <td class="p-3 border-r border-gray-200 font-medium text-gray-600 bg-white sticky left-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center whitespace-nowrap">{{ time }}</td>
+                    <td v-for="group in scheduleMatrix.groups" :key="group" class="p-2 border-r border-gray-200 align-top w-48 min-w-[12rem]">
+                      <template v-if="scheduleMatrix.data[day][time][group]">
+                        <div v-if="scheduleMatrix.data[day][time][group].length > 1" class="text-xs font-bold text-red-600 mb-1 text-center bg-red-100 rounded">КОЛЛИЗИЯ!</div>
+                        <div v-for="(item, idx) in scheduleMatrix.data[day][time][group]" :key="idx"
+                             class="border rounded-md p-2 h-full shadow-sm flex flex-col justify-between mb-1"
+                             :class="[ scheduleMatrix.data[day][time][group].length > 1 ? 'bg-red-50 border-red-300' : (item.groups.length > 1 ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200') ]">
+                          <div class="font-bold text-gray-800 text-[13px] leading-tight mb-1">{{ item.subject }}</div>
+                          <div class="text-xs text-gray-600 mb-2">{{ item.instructor }}</div>
+                          <div class="text-[11px] font-mono bg-white px-1.5 py-0.5 rounded text-gray-500 inline-block self-start border border-gray-100">📍 {{ item.room }}</div>
+                        </div>
+                      </template>
+                      <template v-else><div class="w-full h-full bg-gray-50/50"></div></template>
+                    </td>
+                  </template>
+                </tr>
+              </template>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Затемнение фона при открытом меню (на мобилках) -->
+    <div v-if="isSettingsOpen" @click="isSettingsOpen = false" class="fixed inset-0 bg-black/20 z-40 lg:hidden transition-opacity"></div>
+
+    <!-- Боковое меню (Sidebar) -->
+    <div class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-gray-200 flex flex-col"
+         :class="isSettingsOpen ? 'translate-x-0' : 'translate-x-full'">
+      
+      <!-- Заголовок сайдбара -->
+      <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+          ⚙️ Настройки
+        </h2>
+        <button @click="isSettingsOpen = false" class="text-gray-400 hover:text-red-500 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <!-- Контент сайдбара (скроллится если много настроек) -->
+      <div class="p-5 overflow-y-auto flex-1 space-y-6">
+        
+        <!-- Секция 1: Базовые настройки -->
+        <div>
+          <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wider border-b pb-2 mb-4">Базовые параметры</h3>
+          <div class="space-y-4">
+            
+            <!-- Параметр с тултипом -->
+            <div>
+              <div class="flex items-center gap-1 mb-1">
+                <label class="block text-sm font-medium text-gray-700">Размер популяции</label>
+                <!-- ТУЛТИП (Сделан через CSS group-hover) -->
+                <div class="group relative flex items-center justify-center cursor-help">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-gray-400 hover:text-indigo-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
+                  <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-xs text-white rounded shadow-lg z-50 text-center">
+                    Количество вариантов расписания в одном поколении. Увеличение после минимально походящего кол-ва имеет мало смысла.
+                  </div>
+                </div>
+              </div>
+              <input type="number" v-model="params.population_size" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+
+            <div>
+              <div class="flex items-center gap-1 mb-1">
+                <label class="block text-sm font-medium text-gray-700">Поколения</label>
+                <div class="group relative flex items-center justify-center cursor-help">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-gray-400 hover:text-indigo-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
+                  <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-xs text-white rounded shadow-lg z-50 text-center">
+                    Сколько раз алгоритм будет скрещивать варианты. Главный кандидат для увеличения, при плохом результате.
+                  </div>
+                </div>
+              </div>
+              <input type="number" v-model="params.generations" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+              <div class="flex items-center gap-1 mb-1">
+                <label class="block text-sm font-medium text-gray-700">Шанс мутации</label>
+              </div>
+              <input type="number" step="0.001" v-model="params.mutation_rate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+        </div>
+
+        <!-- Секция 2: Продвинутые настройки -->
+        <div>
+          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2 mb-4">Продвинутые</h3>
+          <div class="space-y-4 opacity-75 focus-within:opacity-100 transition-opacity">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Элитизм (сохранение лучших)</label>
+              <input type="number" v-model="params.elitism" class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-400">
+            </div>
+          </div>
+        </div>
+
+        <!-- Секция 3: Правила (Заглушка) -->
+        <div>
+          <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2 mb-4">Правила / Ограничения</h3>
+          <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-400">
+            Модуль правил в разработке...
+          </div>
+        </div>
+
+      </div>
+      
+      <!-- Подвал сайдбара (кнопки быстрого старта прямо оттуда) -->
+      <div class="p-5 border-t border-gray-100 bg-gray-50 flex gap-2">
+        <button @click="generateGenetic" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors">
+          Запустить ГА
+        </button>
+      </div>
+
+    </div>
+  </div>
+</template>

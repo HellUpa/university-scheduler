@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Твои кастомные стили остаются здесь */
+.loader { 
+  border-top-color: #4f46e5; 
+  animation: spinner 1.5s linear infinite; 
+}
+
+@keyframes spinner { 
+  0% { transform: rotate(0deg); } 
+  100% { transform: rotate(360deg); } 
+}
+
+.table-container::-webkit-scrollbar { 
+  height: 8px; 
+}
+.table-container::-webkit-scrollbar-thumb { 
+  background-color: #cbd5e1; 
+  border-radius: 4px; 
+}

@@ -2,10 +2,9 @@ services:
   # ==========================================
   # 1. API SERVICE (Основной вход)
   # ==========================================
-  api:
+  backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ./backend
     container_name: scheduler-api
     command: ./scheduler
     ports:
@@ -14,11 +13,25 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./env/config.yaml:/etc/scheduler/config.yaml
+      - ./backend/env/config.yaml:/etc/scheduler/config.yaml
     environment:
       - CONFIG_PATH=/etc/scheduler
     networks:
       - scheduler-network
+
+  # ==========================================
+  # 2. FRONTEND
+  # ==========================================
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
 
   # ==========================================
   # ИНФРАСТРУКТУРА

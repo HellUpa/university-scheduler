@@ -19,10 +19,16 @@ type MutationFunc func(*algorithm.Schedule, float64)
 type ProgressFunc func(gen int, fitness float64, mutRate float64)
 
 type GeneticEngine struct {
-	DB             *gorm.DB
+	DB *gorm.DB
+
+	// Главные параметры
 	PopulationSize int
 	Generations    int
 	MutationRate   float64
+
+	// Дополнительные параметры
+	EliteSize      float64
+	TournamentSize int
 
 	// Контекст
 	Classes []domain.CourseClass
@@ -38,8 +44,11 @@ func NewEngine(db *gorm.DB) *GeneticEngine {
 	return &GeneticEngine{
 		DB:             db,
 		PopulationSize: 100,
-		Generations:    100,
-		MutationRate:   0.01,
+		Generations:    200,
+		MutationRate:   0.001,
+
+		EliteSize:      0.05,
+		TournamentSize: 3,
 	}
 }
 
@@ -96,9 +105,6 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 
 	bestFitnessOverall := 0.0
 	stagnantGenerations := 0
-
-	// Переменные для импульсной мутации
-	shockMode := false   // Флаг "Режим удара"
 	recoveryCounter := 0 // Счетчик поколений восстановления (иммунитет)
 	// =========================================
 
@@ -155,22 +161,14 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
 		}
 
-		// if bestFitnessOverall >= 1.49999 {
-		// 	log.Println("Best individual found, break the cycle")
-		// 	break
-		// }
-
 		// 3. Селекция и Скрещивание
 		newPop := make([]*algorithm.Schedule, 0, eng.PopulationSize)
-		eliteCount := int(float64(eng.PopulationSize) * 0.1)
-		if shockMode {
-			eliteCount = 2 // При шоке оставляем только самого лучшего, остальных в топку
-		}
+		eliteCount := int(float64(eng.PopulationSize) * eng.EliteSize)
 		newPop = append(newPop, population[:eliteCount]...)
 
 		for len(newPop) < eng.PopulationSize {
-			p1 := tournamentSelect(population, 3) // Турнир размером 3
-			p2 := tournamentSelect(population, 3)
+			p1 := tournamentSelect(population, eng.TournamentSize) // Турнир размером 3
+			p2 := tournamentSelect(population, eng.TournamentSize)
 
 			child := eng.crossover(p1, p2)
 			mutateToApply(child, currentMutationRate)
@@ -202,7 +200,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 		// Мы в режиме улучшения мягких ограничений.
 		// Логика нагрева/шока здесь не нужна, она слишком агрессивна.
 		// Просто используем мягкую мутацию с фиксированным шансом.
-		return eng.softMutate, 0.15, stagnantGens, recoveryCounter
+		return eng.softMutate, 0.10, stagnantGens, recoveryCounter
 	}
 
 	// --- Фаза 2: Поиск (ищем валидное решение) ---
@@ -215,7 +213,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 
 	// Проверяем стагнацию
 	var isStagnating bool
-	if bestFitness > bestFitnessOverall+0.0000001 {
+	if bestFitness > bestFitnessOverall+0.000001 {
 		// Прогресс есть! Сбрасываем стагнацию.
 		newStagnantGens = 0
 		isStagnating = false
