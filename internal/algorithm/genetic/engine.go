@@ -106,7 +106,7 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 		// 1. Оценка популяции (Параллельно)
 		var wg sync.WaitGroup
 		numCPUs := runtime.NumCPU()
-		sem := make(chan struct{}, numCPUs*2)
+		sem := make(chan struct{}, numCPUs)
 
 		for _, ind := range population {
 			wg.Add(1)
