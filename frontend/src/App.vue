@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, shallowRef } from 'vue'
 import { Chart, registerables } from 'chart.js'
+import SettingInput from './components/SettingInput.vue'
 
 Chart.register(...registerables)
 
@@ -13,10 +14,23 @@ interface ScheduleItem {
 }
 
 const params = reactive({
-  population_size: 200,
-  generations: 500,
-  mutation_rate: 0.001,
-  elitism: 2, // Продвинутая настройка (для примера)
+  main_options: {
+    population_size: 200,
+    generations: 500,
+    mutation_rate: 0.001,
+  },
+  additional_options: {
+    elitism: 0.05,
+	  tournament_size: 3,
+	  soft_mutation_rate: 0.10,
+	  soft_mutation_attempts: 10,
+	  heat_stagnant_count: 10,
+	  heat_step_scale: 0.1,
+	  shock_stagnant_count: 80,
+	  shock_mutation_rate: 0.2,
+	  shock_min_recovery_count: 20,
+	  shock_recovery_scale: 0.05,
+  }
 })
 
 const isSettingsOpen = ref(false) // Состояние боковой панели
@@ -229,52 +243,96 @@ const scheduleMatrix = computed(() => {
         <div>
           <h3 class="text-xs font-bold text-indigo-600 uppercase tracking-wider border-b pb-2 mb-4">Базовые параметры</h3>
           <div class="space-y-4">
+            <SettingInput 
+              v-model="params.main_options.population_size" 
+              label="Размер популяции" 
+              tooltip="Количество вариантов расписания в одном поколении. Увеличение после определенного минимального порога имеет мало смысла" 
+            />
             
-            <!-- Параметр с тултипом -->
-            <div>
-              <div class="flex items-center gap-1 mb-1">
-                <label class="block text-sm font-medium text-gray-700">Размер популяции</label>
-                <!-- ТУЛТИП (Сделан через CSS group-hover) -->
-                <div class="group relative flex items-center justify-center cursor-help">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-gray-400 hover:text-indigo-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
-                  <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-xs text-white rounded shadow-lg z-50 text-center">
-                    Количество вариантов расписания в одном поколении. Увеличение после минимально походящего кол-ва имеет мало смысла.
-                  </div>
-                </div>
-              </div>
-              <input type="number" v-model="params.population_size" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-            </div>
-
-            <div>
-              <div class="flex items-center gap-1 mb-1">
-                <label class="block text-sm font-medium text-gray-700">Поколения</label>
-                <div class="group relative flex items-center justify-center cursor-help">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 text-gray-400 hover:text-indigo-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>
-                  <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-gray-800 text-xs text-white rounded shadow-lg z-50 text-center">
-                    Сколько раз алгоритм будет скрещивать варианты. Главный кандидат для увеличения, при плохом результате.
-                  </div>
-                </div>
-              </div>
-              <input type="number" v-model="params.generations" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
-
-            <div>
-              <div class="flex items-center gap-1 mb-1">
-                <label class="block text-sm font-medium text-gray-700">Шанс мутации</label>
-              </div>
-              <input type="number" step="0.001" v-model="params.mutation_rate" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            </div>
+            <SettingInput 
+              v-model="params.main_options.generations" 
+              label="Поколения" 
+              tooltip="Сколько раз алгоритм будет скрещивать варианты. Первый кандидат на увеличение, если результат плохой" 
+            />
+            
+            <SettingInput 
+              v-model="params.main_options.mutation_rate" 
+              label="Шанс мутации" 
+              step="0.001" 
+              tooltip="Вероятность случайного изменения гена. Спасает от локальных оптимумов" 
+            />
           </div>
         </div>
 
         <!-- Секция 2: Продвинутые настройки -->
         <div>
           <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider border-b pb-2 mb-4">Продвинутые</h3>
-          <div class="space-y-4 opacity-75 focus-within:opacity-100 transition-opacity">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Элитизм (сохранение лучших)</label>
-              <input type="number" v-model="params.elitism" class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-400">
-            </div>
+          <div class="space-y-4 opacity-75 focus-within:opacity-100 transition-opacity">        
+            <SettingInput 
+              v-model="params.additional_options.elitism" 
+              label="Элитизм"
+              step="0.01" 
+              tooltip="Процент лучших особей, переходящих в новое поколение без изменений" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.tournament_size" 
+              label="Размер турнира" 
+              tooltip="Кол-во случайных особей, из которых выбирается лучший родитель" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.soft_mutation_rate" 
+              label="Шанс мягкой мутации"
+              step="0.1"
+              tooltip="Мягкая мутация применяется когда нет жестких конфликтов. Шанс можно ставить выше обычной мутации" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.soft_mutation_attempts" 
+              label="Кол-во попыток мягкой мутации" 
+              tooltip="Мягкая мутация работает также как и обычная, но не применяет изменения если появились жесткие конфликты. Для эффективности делается несколько попыток" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.heat_stagnant_count" 
+              label="Кол-во поколений до нагрева" 
+              tooltip="Нагрев это механизм увеличения шанса мутации при стагнации (показатели не улучшаются). То есть это кол-во стагнирующих поколений" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.heat_step_scale" 
+              label="Множитель нагрева"
+              step="0.01"
+              tooltip="Коэффициент на который умножается текущий показатель стагнации. Итоговое число будет процентом на которое увеличится базовый шанс мутации." 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.shock_stagnant_count" 
+              label="Кол-во поколений до шока" 
+              tooltip="Шок это механизм резкого скачка шанса мутации, для перемешивания результата. То есть это кол-во стагнирующих поколений до шока" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.shock_mutation_rate" 
+              label="Шанс мутации шока"
+              step="0.01" 
+              tooltip="Насколько высокий должен быть шанс мутации у шока. Параметр следует делать значительно выше базового шанса мутации" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.shock_min_recovery_count" 
+              label="Кол-во поколений после шока" 
+              tooltip="После шока дается период восстановления, с поколениями просто уменьшается этот показатель" 
+            />
+
+            <SettingInput 
+              v-model="params.additional_options.shock_recovery_scale" 
+              label="Кол-во поколений после шока (в процентах)"
+              step="0.01" 
+              tooltip="Настраивает время восстановления в процентах от числа кол-ва поколений, не применяется если полученное число меньше предыдущего параметра" 
+            />
+
           </div>
         </div>
 

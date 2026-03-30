@@ -22,13 +22,24 @@ type GeneticEngine struct {
 	DB *gorm.DB
 
 	// Главные параметры
-	PopulationSize int
-	Generations    int
-	MutationRate   float64
+	PopulationSize   int
+	Generations      int
+	BaseMutationRate float64
 
 	// Дополнительные параметры
 	EliteSize      float64
 	TournamentSize int
+	// Мягкая мутация (без жестких конфликтов)
+	SoftMutationRate     float64
+	SoftMutationAttempts int
+	// Нагрев мутации при стагнации
+	HeatStagnantCount int
+	HeatStepScale     float64
+	// Шоковая терапия, если нагрев не помогает
+	ShockStagnantCount    int
+	ShockMutationRate     float64
+	ShockMinRecoveryCount int
+	ShockRecoveryScale    float64
 
 	// Контекст
 	Classes []domain.CourseClass
@@ -42,13 +53,21 @@ type GeneticEngine struct {
 
 func NewEngine(db *gorm.DB) *GeneticEngine {
 	return &GeneticEngine{
-		DB:             db,
-		PopulationSize: 100,
-		Generations:    200,
-		MutationRate:   0.001,
+		DB:               db,
+		PopulationSize:   100,
+		Generations:      200,
+		BaseMutationRate: 0.001,
 
-		EliteSize:      0.05,
-		TournamentSize: 3,
+		EliteSize:             0.05,
+		TournamentSize:        3,
+		SoftMutationRate:      0.10,
+		SoftMutationAttempts:  10,
+		HeatStagnantCount:     10,
+		HeatStepScale:         0.1,
+		ShockStagnantCount:    80,
+		ShockMutationRate:     0.2,
+		ShockMinRecoveryCount: 20,
+		ShockRecoveryScale:    0.05,
 	}
 }
 
@@ -200,7 +219,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 		// Мы в режиме улучшения мягких ограничений.
 		// Логика нагрева/шока здесь не нужна, она слишком агрессивна.
 		// Просто используем мягкую мутацию с фиксированным шансом.
-		return eng.softMutate, 0.10, stagnantGens, recoveryCounter
+		return eng.softMutate, eng.SoftMutationRate, stagnantGens, recoveryCounter
 	}
 
 	// --- Фаза 2: Поиск (ищем валидное решение) ---
@@ -208,7 +227,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 
 	// Если мы в фазе восстановления после шока - ничего не делаем
 	if recoveryCounter > 0 {
-		return eng.mutate, eng.MutationRate, 0, recoveryCounter - 1
+		return eng.mutate, eng.BaseMutationRate, 0, recoveryCounter - 1
 	}
 
 	// Проверяем стагнацию
@@ -224,19 +243,16 @@ func (eng *GeneticEngine) determineMutationStrategy(
 	}
 
 	// Расчет скорости мутации на основе стагнации
-	currentMutationRate := eng.MutationRate   // Базовая ставка
-	if isStagnating && newStagnantGens > 10 { // Нагрев
-		heatStep := float64((newStagnantGens-10)/10) * 0.01
-		currentMutationRate = eng.MutationRate + heatStep
-		if currentMutationRate > 0.15 {
-			currentMutationRate = 0.15
-		}
+	currentMutationRate := eng.BaseMutationRate                  // Базовая ставка
+	if isStagnating && newStagnantGens > eng.HeatStagnantCount { // Нагрев
+		heatStep := float64((newStagnantGens)) * eng.HeatStepScale
+		currentMutationRate = eng.BaseMutationRate + (eng.BaseMutationRate * heatStep)
 	}
 
 	// ШОКОВАЯ ТЕРАПИЯ
-	if isStagnating && newStagnantGens > 80 {
+	if isStagnating && newStagnantGens > eng.ShockStagnantCount {
 		log.Printf("!!! SHOCK THERAPY (Hard search) !!!")
-		return eng.mutate, 0.3, 0, max(int(float64(eng.Generations)*0.05), 20)
+		return eng.mutate, eng.ShockMutationRate, 0, max(int(float64(eng.Generations)*eng.ShockRecoveryScale), eng.ShockMinRecoveryCount)
 	}
 
 	return eng.mutate, currentMutationRate, newStagnantGens, 0
@@ -344,8 +360,8 @@ func (eng *GeneticEngine) softMutate(schedule *algorithm.Schedule, rate float64)
 		return
 	}
 
-	// Попробуем сделать 10 попыток найти удачную мутацию, прежде чем сдаться
-	for range 10 {
+	// Попробуем сделать несколько попыток найти удачную мутацию, прежде чем сдаться
+	for range eng.SoftMutationAttempts {
 		assignIndex := rand.Intn(len(schedule.Assignments))
 		assignToMove := schedule.Assignments[assignIndex]
 

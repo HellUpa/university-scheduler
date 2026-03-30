@@ -21,11 +21,32 @@ func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{DB: db}
 }
 
-// Структура для приема параметров алгоритма из тела запроса (POST JSON)
-type GenerateRequest struct {
+type MainOptions struct {
 	PopulationSize int     `json:"population_size"`
 	Generations    int     `json:"generations"`
 	MutationRate   float64 `json:"mutation_rate"`
+}
+
+type AdditionalOptions struct {
+	EliteSize      float64 `json:"elitism"`
+	TournamentSize int     `json:"tournament_size"`
+	// Мягкая мутация (без жестких конфликтов)
+	SoftMutationRate     float64 `json:"soft_mutation_rate"`
+	SoftMutationAttempts int     `json:"soft_mutation_attempts"`
+	// Нагрев мутации при стагнации
+	HeatStagnantCount int     `json:"heat_stagnant_count"`
+	HeatStepScale     float64 `json:"heat_step_scale"`
+	// Шоковая терапия, если нагрев не помогает
+	ShockStagnantCount    int     `json:"shock_stagnant_count"`
+	ShockMutationRate     float64 `json:"shock_mutation_rate"`
+	ShockMinRecoveryCount int     `json:"shock_min_recovery_count"`
+	ShockRecoveryScale    float64 `json:"shock_recovery_scale"`
+}
+
+// Структура для приема параметров алгоритма из тела запроса (POST JSON)
+type GenerateRequest struct {
+	MainOptions       MainOptions       `json:"main_options"`
+	AdditionalOptions AdditionalOptions `json:"additional_options"`
 }
 
 // Структура для красивого ответа
@@ -44,9 +65,23 @@ type ScheduleItemResponse struct {
 func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	// 1. Читаем параметры по умолчанию
 	req := GenerateRequest{
-		PopulationSize: 200,
-		Generations:    200,
-		MutationRate:   0.05,
+		MainOptions: MainOptions{
+			PopulationSize: 100,
+			Generations:    200,
+			MutationRate:   0.001,
+		},
+		AdditionalOptions: AdditionalOptions{
+			EliteSize:             0.05,
+			TournamentSize:        3,
+			SoftMutationRate:      0.10,
+			SoftMutationAttempts:  10,
+			HeatStagnantCount:     10,
+			HeatStepScale:         0.1,
+			ShockStagnantCount:    80,
+			ShockMutationRate:     0.2,
+			ShockMinRecoveryCount: 20,
+			ShockRecoveryScale:    0.05,
+		},
 	}
 
 	if err := c.BodyParser(&req); err != nil && len(c.Body()) > 0 {
@@ -55,9 +90,19 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 
 	// Создаем движок ГА
 	engine := genetic.NewEngine(h.DB)
-	engine.PopulationSize = req.PopulationSize
-	engine.Generations = req.Generations
-	engine.MutationRate = req.MutationRate
+	engine.PopulationSize = req.MainOptions.PopulationSize
+	engine.Generations = req.MainOptions.Generations
+	engine.BaseMutationRate = req.MainOptions.MutationRate
+	engine.EliteSize = req.AdditionalOptions.EliteSize
+	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
+	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts
+	engine.HeatStagnantCount = req.AdditionalOptions.HeatStagnantCount
+	engine.HeatStepScale = req.AdditionalOptions.HeatStepScale
+	engine.ShockStagnantCount = req.AdditionalOptions.ShockStagnantCount
+	engine.ShockMutationRate = req.AdditionalOptions.ShockMutationRate
+	engine.ShockMinRecoveryCount = req.AdditionalOptions.ShockMinRecoveryCount
+	engine.ShockRecoveryScale = req.AdditionalOptions.ShockRecoveryScale
 
 	startTime := time.Now()
 	bestSchedule, err := engine.Run(nil)
@@ -84,7 +129,26 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 
 func (h *Handler) EvolutionWS(c *websocket.Conn) {
 	// 1. Читаем параметры (клиент пришлет их первым сообщением)
-	var req GenerateRequest
+	req := GenerateRequest{
+		MainOptions: MainOptions{
+			PopulationSize: 100,
+			Generations:    200,
+			MutationRate:   0.001,
+		},
+		AdditionalOptions: AdditionalOptions{
+			EliteSize:             0.05,
+			TournamentSize:        3,
+			SoftMutationRate:      0.10,
+			SoftMutationAttempts:  10,
+			HeatStagnantCount:     10,
+			HeatStepScale:         0.1,
+			ShockStagnantCount:    80,
+			ShockMutationRate:     0.2,
+			ShockMinRecoveryCount: 20,
+			ShockRecoveryScale:    0.05,
+		},
+	}
+
 	if err := c.ReadJSON(&req); err != nil {
 		return
 	}
@@ -92,9 +156,19 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 	startTime := time.Now()
 
 	engine := genetic.NewEngine(h.DB)
-	engine.PopulationSize = req.PopulationSize
-	engine.Generations = req.Generations
-	engine.MutationRate = req.MutationRate
+	engine.PopulationSize = req.MainOptions.PopulationSize
+	engine.Generations = req.MainOptions.Generations
+	engine.BaseMutationRate = req.MainOptions.MutationRate
+	engine.EliteSize = req.AdditionalOptions.EliteSize
+	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
+	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts
+	engine.HeatStagnantCount = req.AdditionalOptions.HeatStagnantCount
+	engine.HeatStepScale = req.AdditionalOptions.HeatStepScale
+	engine.ShockStagnantCount = req.AdditionalOptions.ShockStagnantCount
+	engine.ShockMutationRate = req.AdditionalOptions.ShockMutationRate
+	engine.ShockMinRecoveryCount = req.AdditionalOptions.ShockMinRecoveryCount
+	engine.ShockRecoveryScale = req.AdditionalOptions.ShockRecoveryScale
 
 	// 2. Определяем функцию прогресса, которая будет слать данные в сокет
 	onProgress := func(gen int, fitness float64, mutRate float64) {
