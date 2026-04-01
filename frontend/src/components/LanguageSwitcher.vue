@@ -9,7 +9,8 @@ const isOpen = ref(false)
 // Массив доступных языков
 const languages = [
   { code: 'ru', name: 'Русский', flag: 'https://flagcdn.com/w40/ru.png' },
-  { code: 'kk', name: 'Қазақша', flag: 'https://flagcdn.com/w40/kz.png' }
+  { code: 'kk', name: 'Қазақша', flag: 'https://flagcdn.com/w40/kz.png' },
+  { code: 'en', name: 'English', flag: 'https://flagcdn.com/w40/us.png' }
 ]
 
 // Находим текущий выбранный язык для отображения на кнопке
