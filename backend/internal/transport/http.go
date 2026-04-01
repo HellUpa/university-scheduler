@@ -43,6 +43,10 @@ type AdditionalOptions struct {
 	ShockRecoveryScale    float64 `json:"shock_recovery_scale"`
 }
 
+type RuleOptions struct {
+	
+}
+
 // Структура для приема параметров алгоритма из тела запроса (POST JSON)
 type GenerateRequest struct {
 	MainOptions       MainOptions       `json:"main_options"`
@@ -90,6 +94,8 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 
 	// Создаем движок ГА
 	engine := genetic.NewEngine(h.DB)
+
+	// Настраиваем параметры ГА из запроса
 	engine.PopulationSize = req.MainOptions.PopulationSize
 	engine.Generations = req.MainOptions.Generations
 	engine.BaseMutationRate = req.MainOptions.MutationRate

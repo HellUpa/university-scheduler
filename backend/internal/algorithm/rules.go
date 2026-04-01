@@ -26,13 +26,15 @@ type EvaluatorConfig struct {
 
 // DefaultConfig - настройки по умолчанию
 var DefaultConfig = EvaluatorConfig{
-	MaxClassesPerDay: 5,
+	PenaltyGap:           -20.0,
+	PenaltyWrongRoomType: -10.0,
 
-	PenaltyGap:                  -20.0,
-	PenaltyWrongRoomType:        -10.0,
-	BonusPerfectRoomType:        +5.0,
-	BonusDayWithoutGaps:         +20.0,
-	PenaltyOverloadedDay:        -10.0,
+	BonusPerfectRoomType: +5.0,
+	BonusDayWithoutGaps:  +20.0,
+
+	MaxClassesPerDay:     5,
+	PenaltyOverloadedDay: -100.0,
+
 	PenaltyLectureAfterPractice: -25.0,
 
 	TanhScaleFactor: 0.3,

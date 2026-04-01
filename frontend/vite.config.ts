@@ -16,13 +16,5 @@ export default defineConfig({
   server: {
     host: true, // Нужно для Docker
     port: 5173,
-    // proxy: {
-    //   // HTTP запросы
-    //   '/api': {
-    //     target: 'http://backend:8080', // Имя сервиса в docker-compose
-    //     changeOrigin: true,
-    //     ws: true // Важно для вебсокетов!
-    //   }
-    // }
   }
 })

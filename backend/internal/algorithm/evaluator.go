@@ -11,15 +11,12 @@ type Evaluator struct {
 	Rules   []Rule
 }
 
-func NewEvaluator(config *EvaluatorConfig, rooms []domain.Room, slots []domain.TimeSlot, classes []domain.CourseClass) *Evaluator {
+func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain.CourseClass) *Evaluator {
 	ctx := &EvalContext{
 		Config:     DefaultConfig,
 		RoomsMap:   make(map[uint]*domain.Room),
 		SlotsMap:   make(map[uint]*domain.TimeSlot),
 		ClassesMap: make(map[uint]*domain.CourseClass),
-	}
-	if config != nil {
-		ctx.Config = *config
 	}
 
 	for i := range rooms {

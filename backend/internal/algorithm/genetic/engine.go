@@ -98,8 +98,7 @@ func (eng *GeneticEngine) Prepare() error {
 		return err
 	}
 
-	// TODO: Добавить кастомную конфигурацию
-	eng.Evaluator = algorithm.NewEvaluator(nil, rooms, slots, eng.Classes)
+	eng.Evaluator = algorithm.NewEvaluator(rooms, slots, eng.Classes)
 
 	for _, r := range rooms {
 		eng.RoomIDs = append(eng.RoomIDs, r.ID)

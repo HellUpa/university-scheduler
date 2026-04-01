@@ -2,10 +2,13 @@
 import { ref, reactive, computed, shallowRef } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import SettingInput from './components/SettingInput.vue'
+import LanguageSwitcher from './components/LanguageSwitcher.vue'
+import { useI18n } from 'vue-i18n' // <-- Обязательно импортируем хук
+
 
 Chart.register(...registerables)
 
-// Укажи здесь адрес твоего Fiber бэкенда!
+const { t } = useI18n() 
 const API_BASE_URL = 'http://localhost:8080'
 const WS_BASE_URL = 'ws://localhost:8080'
 
@@ -90,7 +93,7 @@ const generateGenetic = () => {
     if (msg.type === 'progress') {
       loadingText.value = `🧬 Поколение ${msg.gen}: Фитнес ${msg.fitness.toFixed(4)}`
       stats.fitness = msg.fitness
-      if (chartInstance.value) {
+      if (chartInstance.value && chartInstance.value.data.datasets[0]) {
         chartInstance.value.data.labels?.push(msg.gen)
         chartInstance.value.data.datasets[0].data.push(msg.fitness)
         chartInstance.value.update('none')
@@ -106,7 +109,6 @@ const generateGenetic = () => {
 }
 
 const daysOrder = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
-const dayTranslations: Record<string, string> = { "monday": "Понедельник", "tuesday": "Вторник", "wednesday": "Среда", "thursday": "Четверг", "friday": "Пятница", "saturday": "Суббота" }
 
 const scheduleMatrix = computed(() => {
   if (rawSchedule.value.length === 0) return null
@@ -136,18 +138,20 @@ const scheduleMatrix = computed(() => {
       <!-- Header -->
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 gap-4">
         <div>
-          <h1 class="text-3xl font-extrabold text-indigo-600 tracking-tight">AI Scheduler</h1>
-          <p class="text-sm text-gray-500 mt-1">Матричное расписание с применением ГА</p>
+          <h1 class="text-3xl font-extrabold text-indigo-600 tracking-tight">{{ t('header.title') }}</h1>
+          <p class="text-sm text-gray-500 mt-1">{{ t('header.subtitle') }}</p>
         </div>
         
         <div class="flex gap-3 items-center">
           <button @click="generateGreedy" :disabled="isGenerating" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg shadow-sm disabled:opacity-50">
-            ⚡ Жадный
+            {{ t('header.btn_greedy') }}
           </button>
           <button @click="generateGenetic" :disabled="isGenerating" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg shadow-sm disabled:opacity-50">
-            🧬 Генетический
+            {{ t('header.btn_genetic') }}
           </button>
-          
+
+          <LanguageSwitcher />
+
           <!-- Кнопка Настроек (Шестеренка) -->
           <button @click="isSettingsOpen = true" class="p-2.5 bg-white border border-gray-200 hover:bg-gray-100 text-gray-600 rounded-lg shadow-sm transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -160,17 +164,16 @@ const scheduleMatrix = computed(() => {
 
       <!-- Stats Panel -->
       <div v-if="stats.show" class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <!-- ... (Твой старый блок со статистикой, без изменений) ... -->
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
-          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Фитнес-оценка</p>
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('stats.fitness') }}</p>
           <p :class="['text-3xl font-extrabold mt-1', stats.fitness >= 1.0 ? 'text-green-600' : 'text-red-500']">{{ stats.fitness.toFixed(4) }}</p>
         </div>
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
-          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Время генерации</p>
-          <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ stats.time }} мс</p>
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('stats.time') }}</p>
+          <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ stats.time }} {{ t('stats.time_unit') }}</p>
         </div>
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
-          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Алгоритм</p>
+          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('stats.algorithm') }}</p>
           <p class="text-3xl font-extrabold text-indigo-600 mt-1">{{ stats.algo }}</p>
         </div>
       </div>
@@ -189,7 +192,7 @@ const scheduleMatrix = computed(() => {
          <table class="w-full text-left border-collapse min-w-[800px]">
           <thead class="bg-gray-100 text-gray-700 text-sm tracking-wider border-b-2 border-gray-300">
             <tr>
-              <th class="p-4 w-32 border-r border-gray-200 bg-gray-100 sticky left-0 z-10">Время</th>
+              <th class="p-4 w-32 border-r border-gray-200 bg-gray-100 sticky left-0 z-10">{{ t('matrix.time_slots') }}</th>
               <th v-for="group in scheduleMatrix.groups" :key="group" class="p-4 border-r border-gray-200 text-center font-bold text-indigo-900">{{ group }}</th>
             </tr>
           </thead>
@@ -197,14 +200,14 @@ const scheduleMatrix = computed(() => {
             <template v-for="day in daysOrder" :key="day">
               <template v-if="scheduleMatrix.data[day]">
                 <tr class="bg-indigo-50 border-y-2 border-indigo-100">
-                  <td :colspan="scheduleMatrix.groups.length + 1" class="p-3 text-center font-bold text-indigo-700 uppercase tracking-widest sticky left-0">{{ dayTranslations[day] || day }}</td>
+                  <td :colspan="scheduleMatrix.groups.length + 1" class="p-3 text-center font-bold text-indigo-700 uppercase tracking-widest sticky left-0">{{ t(`days.${day}`) }}</td>
                 </tr>
                 <tr v-for="time in scheduleMatrix.times" :key="time" class="hover:bg-gray-50 transition-colors">
                   <template v-if="scheduleMatrix.data[day][time]">
                     <td class="p-3 border-r border-gray-200 font-medium text-gray-600 bg-white sticky left-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-center whitespace-nowrap">{{ time }}</td>
                     <td v-for="group in scheduleMatrix.groups" :key="group" class="p-2 border-r border-gray-200 align-top w-48 min-w-[12rem]">
                       <template v-if="scheduleMatrix.data[day][time][group]">
-                        <div v-if="scheduleMatrix.data[day][time][group].length > 1" class="text-xs font-bold text-red-600 mb-1 text-center bg-red-100 rounded">КОЛЛИЗИЯ!</div>
+                        <div v-if="scheduleMatrix.data[day][time][group].length > 1" class="text-xs font-bold text-red-600 mb-1 text-center bg-red-100 rounded">{{ t('matrix.collision') }}</div>
                         <div v-for="(item, idx) in scheduleMatrix.data[day][time][group]" :key="idx"
                              class="border rounded-md p-2 h-full shadow-sm flex flex-col justify-between mb-1"
                              :class="[ scheduleMatrix.data[day][time][group].length > 1 ? 'bg-red-50 border-red-300' : (item.groups.length > 1 ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200') ]">
@@ -234,7 +237,7 @@ const scheduleMatrix = computed(() => {
       <!-- Заголовок сайдбара -->
       <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
         <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-          ⚙️ Настройки
+          {{ t('settings.title') }}
         </h2>
         <button @click="isSettingsOpen = false" class="text-gray-400 hover:text-red-500 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
@@ -252,7 +255,7 @@ const scheduleMatrix = computed(() => {
           >
             <span class="text-xs font-bold uppercase tracking-wider transition-colors"
                   :class="expandedSections.main ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              Базовые параметры
+              {{ t('settings.main_title') }}
             </span>
             <!-- Иконка стрелочки (крутится при открытии) -->
             <svg xmlns="http://www.w3.org/2000/svg" 
@@ -267,21 +270,21 @@ const scheduleMatrix = computed(() => {
           <div v-show="expandedSections.main" class="space-y-4 pt-2 pb-4">
             <SettingInput 
               v-model="params.main_options.population_size" 
-              label="Размер популяции" 
-              tooltip="Количество вариантов расписания в одном поколении. Увеличение после определенного минимального порога имеет мало смысла" 
+              :label="t('settings.pop_size')" 
+              :tooltip="t('settings.pop_size_tip')" 
             />
             
             <SettingInput 
               v-model="params.main_options.generations" 
-              label="Поколения" 
-              tooltip="Сколько раз алгоритм будет скрещивать варианты. Первый кандидат на увеличение, если результат плохой" 
+              :label="t('settings.generations')" 
+              :tooltip="t('settings.generations_tip')" 
             />
             
             <SettingInput 
               v-model="params.main_options.mutation_rate" 
-              label="Шанс мутации" 
-              step="0.001" 
-              tooltip="Вероятность случайного изменения гена. Спасает от локальных оптимумов" 
+              :label="t('settings.mutation')" 
+              :tooltip="t('settings.mutation_tip')" 
+              step="0.001"
             />
           </div>
         </div>
@@ -294,7 +297,7 @@ const scheduleMatrix = computed(() => {
           >
             <span class="text-xs font-bold uppercase tracking-wider transition-colors"
                   :class="expandedSections.advanced ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              Продвинутые
+              {{ t('settings.adv_title') }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" 
                  class="w-4 h-4 text-gray-400 transition-transform duration-300" 
@@ -307,67 +310,67 @@ const scheduleMatrix = computed(() => {
           <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">        
             <SettingInput 
               v-model="params.additional_options.elitism" 
-              label="Элитизм"
+              :label="t('settings.elitism')" 
+              :tooltip="t('settings.elitism_tip')" 
               step="0.01" 
-              tooltip="Процент лучших особей, переходящих в новое поколение без изменений" 
             />
 
             <SettingInput 
               v-model="params.additional_options.tournament_size" 
-              label="Размер турнира" 
-              tooltip="Кол-во случайных особей, из которых выбирается лучший родитель" 
+              :label="t('settings.tournament')" 
+              :tooltip="t('settings.tournament_tip')" 
             />
 
             <SettingInput 
               v-model="params.additional_options.soft_mutation_rate" 
-              label="Шанс мягкой мутации"
+              :label="t('settings.soft_mutation_rate')" 
+              :tooltip="t('settings.soft_mutation_rate_tip')" 
               step="0.1"
-              tooltip="Мягкая мутация применяется когда нет жестких конфликтов. Шанс можно ставить выше обычной мутации" 
             />
 
             <SettingInput 
               v-model="params.additional_options.soft_mutation_attempts" 
-              label="Кол-во попыток мягкой мутации" 
-              tooltip="Мягкая мутация работает также как и обычная, но не применяет изменения если появились жесткие конфликты. Для эффективности делается несколько попыток" 
+              :label="t('settings.soft_mutation_attempts')" 
+              :tooltip="t('settings.soft_mutation_attempts_tip')" 
             />
 
             <SettingInput 
               v-model="params.additional_options.heat_stagnant_count" 
-              label="Кол-во поколений до нагрева" 
-              tooltip="Нагрев это механизм увеличения шанса мутации при стагнации (показатели не улучшаются). То есть это кол-во стагнирующих поколений" 
+              :label="t('settings.heat_stagnant_count')" 
+              :tooltip="t('settings.heat_stagnant_count_tip')" 
             />
 
             <SettingInput 
               v-model="params.additional_options.heat_step_scale" 
-              label="Множитель нагрева"
+              :label="t('settings.heat_step_scale')" 
+              :tooltip="t('settings.heat_step_scale_tip')" 
               step="0.01"
-              tooltip="Коэффициент на который умножается текущий показатель стагнации. Итоговое число будет процентом на которое увеличится базовый шанс мутации." 
             />
 
             <SettingInput 
               v-model="params.additional_options.shock_stagnant_count" 
-              label="Кол-во поколений до шока" 
-              tooltip="Шок это механизм резкого скачка шанса мутации, для перемешивания результата. То есть это кол-во стагнирующих поколений до шока" 
+              :label="t('settings.shock_stagnant_count')" 
+              :tooltip="t('settings.shock_stagnant_count_tip')" 
             />
 
             <SettingInput 
               v-model="params.additional_options.shock_mutation_rate" 
-              label="Шанс мутации шока"
+              :label="t('settings.shock_mutation_rate')" 
+              :tooltip="t('settings.shock_mutation_rate_tip')" 
               step="0.01" 
-              tooltip="Насколько высокий должен быть шанс мутации у шока. Параметр следует делать значительно выше базового шанса мутации" 
             />
 
             <SettingInput 
               v-model="params.additional_options.shock_min_recovery_count" 
-              label="Кол-во поколений после шока" 
-              tooltip="После шока дается период восстановления, с поколениями просто уменьшается этот показатель" 
+              :label="t('settings.shock_min_recovery_count')" 
+              :tooltip="t('settings.shock_min_recovery_count_tip')" 
             />
 
             <SettingInput 
               v-model="params.additional_options.shock_recovery_scale" 
-              label="Кол-во поколений после шока (в процентах)"
+              :label="t('settings.shock_recovery_scale')" 
+              :tooltip="t('settings.shock_recovery_scale_tip')" 
               step="0.01" 
-              tooltip="Настраивает время восстановления в процентах от кол-ва поколений, не применяется если полученное число меньше предыдущего параметра" 
             />
 
           </div>
@@ -381,7 +384,7 @@ const scheduleMatrix = computed(() => {
           >
             <span class="text-xs font-bold uppercase tracking-wider transition-colors"
                   :class="expandedSections.rules ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              Правила / Ограничения
+              {{ t('settings.rules_title') }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" 
                  class="w-4 h-4 text-gray-400 transition-transform duration-300" 
@@ -393,7 +396,7 @@ const scheduleMatrix = computed(() => {
 
           <div v-show="expandedSections.rules" class="pt-2 pb-4">
           <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-400">
-            Модуль правил в разработке...
+            {{ t('settings.rules_dev') }}
           </div>
         </div>
 
@@ -402,7 +405,7 @@ const scheduleMatrix = computed(() => {
       <!-- Подвал сайдбара (кнопки быстрого старта прямо оттуда) -->
       <div class="p-5 border-t border-gray-100 bg-gray-50 flex gap-2">
         <button @click="generateGenetic" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors">
-          Запустить ГА
+          {{ t('settings.btn_start') }}
         </button>
       </div>
 
