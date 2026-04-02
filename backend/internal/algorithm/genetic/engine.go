@@ -411,7 +411,7 @@ func (eng *GeneticEngine) softMutate(schedule *algorithm.Schedule, rate float64)
 		assignToMove.SlotID = targetSlotID
 
 		// 5. Проверяем ТОЛЬКО жесткие конфликты
-		hardConflicts, _ := eng.Evaluator.CountConflicts(schedule)
+		hardConflicts, _, _ := eng.Evaluator.CountConflicts(schedule)
 
 		// 6. Принимаем решение
 		if hardConflicts > 0 {

@@ -48,45 +48,89 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 }
 
-func (e *Evaluator) CountConflicts(schedule *Schedule) (hardConflicts int, softConflicts float64) {
+func (e *Evaluator) CountConflicts(schedule *Schedule) (hardConflicts int, softPenalties, softBonuses float64) {
 	// 1. Предварительная сборка данных (чтобы правилам было проще)
 	e.buildGroupDailySchedule(schedule)
 
 	hardConflicts = 0
-	softConflicts = 0.0
+	softPenalties = 0.0
+	softBonuses = 0.0
 
 	// 2. Прогоняем расписание через ВСЕ правила
 	for _, rule := range e.Rules {
-		h, s := rule(schedule, e.Data)
+		h, sp, sb := rule(schedule, e.Data)
 		hardConflicts += h
-		softConflicts += s
+		softPenalties += sp
+		softBonuses += sb
 	}
 
-	return hardConflicts, softConflicts
+	return hardConflicts, softPenalties, softBonuses
 }
 
 // CalculateFitness теперь просто оркестратор
 func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
-	totalHardConflicts, totalSoftScore := e.CountConflicts(schedule)
+	hardConflicts, softPenalties, softBonuses := e.CountConflicts(schedule)
 
-	// Делаем поправку на масштаб
+	// Масштабируем
 	scaleFactor := float64(len(schedule.Assignments))
-	relativeSoftScore := totalSoftScore / scaleFactor
+	relPenalties := float64(softPenalties) / scaleFactor
+	relBonuses := float64(softBonuses) / scaleFactor
 
-	// 1. Математика
-	baseFitness := 1.0 / (1.0 + float64(totalHardConflicts))
+	// ==========================================
+	// 1. СЧИТАЕМ ОЦЕНКУ МЯГКИХ ОГРАНИЧЕНИЙ (СТРОГО ОТ 0.0 ДО 1.0)
+	// ==========================================
 
-	// 2. Считаем бонусы с помощью Softsign (от 0 до 1)
-	x := e.Data.Config.TanhScaleFactor * relativeSoftScore
-	// Softsign функция: x / (1 + |x|)
-	softsign := x / (1.0 + math.Abs(x))
+	// Коэффициенты чувствительности (можно вынести в конфиг)
+	// Они определяют, насколько быстро падает/растет кривая
+	penaltySensitivity := e.Data.Config.PenaltyScale
+	bonusSensitivity := e.Data.Config.BonusScale
 
-	// Нормализуем из [-1, 1] в [0, 1]
-	softScoreNormalized := (softsign + 1.0) / 2.0
+	// Оценка по штрафам (от 1.0 до 0.0)
+	// 0 штрафов = 1.0. Много штрафов -> 0.0
+	penaltyScore := math.Exp(relPenalties * penaltySensitivity)
 
-	// 3. Итоговый фитнес
-	// Теперь вес бонусов - это вес нормализованного значения
-	totalFitness := baseFitness * (1.0 + (softScoreNormalized * e.Data.Config.SoftScoreWeight))
+	// Оценка по бонусам (от 0.0 до 1.0)
+	// 0 бонусов = 0.0. Много бонусов -> стремится к 1.0
+	b := relBonuses * bonusSensitivity
+	bonusScore := b / (1.0 + b)
+
+	// Взвешиваем их. Сумма весов ДОЛЖНА БЫТЬ = 1.0
+	// Так как ты предпочитаешь штрафовать, даем штрафам больший вес.
+	weightPenalty := 0.7 // 70% успеха мягких ограничений - это отсутствие штрафов
+	weightBonus := 0.3   // 30% успеха - это наличие бонусов
+
+	dynamicBonusWeight := weightBonus * penaltyScore
+
+	// Собираем итог.
+	normalizedSoftScore := (penaltyScore * weightPenalty) + (bonusScore * dynamicBonusWeight)
+
+	// ==========================================
+	// 2. ФОРМИРУЕМ ИТОГОВЫЙ ФИТНЕС
+	// ==========================================
+
+	var totalFitness float64
+
+	if hardConflicts == 0 {
+		// ВАЛИДНОЕ РЕШЕНИЕ
+		// База всегда 1.0 + оценка мягких ограничений (от 0 до 1)
+		// Диапазон: [1.0, 2.0)
+
+		// Худшее расписание (много штрафов, 0 бонусов): 1.0 + 0.0 = 1.0
+		// Идеальное расписание (0 штрафов, бесконечно бонусов): 1.0 + 1.0 = 2.0
+		totalFitness = 1.0 + normalizedSoftScore
+	} else {
+		// НЕВАЛИДНОЕ РЕШЕНИЕ
+		// База = 1 / (1 + Hard) => 0.5, 0.33, 0.25...
+		baseFitness := 1.0 / (1.0 + float64(hardConflicts))
+
+		// Чтобы дать алгоритму понимать, что он на правильном пути,
+		// добавляем к базе микро-множитель на основе мягких параметров.
+		// Диапазон множителя: [1.0, 1.5).
+		// При Hard=1 максимум будет 0.5 * 1.5 = 0.75 (строго меньше 1.0!)
+		softMultiplier := 1.0 + (normalizedSoftScore * 0.5)
+
+		totalFitness = baseFitness * softMultiplier
+	}
 
 	schedule.Fitness = totalFitness
 	return totalFitness
