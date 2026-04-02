@@ -76,9 +76,13 @@ func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
 	// 1. Математика
 	baseFitness := 1.0 / (1.0 + float64(totalHardConflicts))
 
-	// 2. Считаем бонусы с помощью Tanh (от 0 до 1)
-	// Формула: (tanh(k * score) + 1) / 2
-	softScoreNormalized := (math.Tanh(e.Data.Config.TanhScaleFactor*relativeSoftScore) + 1) / 2
+	// 2. Считаем бонусы с помощью Softsign (от 0 до 1)
+	x := e.Data.Config.TanhScaleFactor * relativeSoftScore
+	// Softsign функция: x / (1 + |x|)
+	softsign := x / (1.0 + math.Abs(x))
+
+	// Нормализуем из [-1, 1] в [0, 1]
+	softScoreNormalized := (softsign + 1.0) / 2.0
 
 	// 3. Итоговый фитнес
 	// Теперь вес бонусов - это вес нормализованного значения

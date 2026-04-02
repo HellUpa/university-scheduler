@@ -16,6 +16,7 @@ type EvaluatorConfig struct {
 	PenaltyWrongRoomType        float64
 	BonusPerfectRoomType        float64
 	BonusDayWithoutGaps         float64
+	BonusCompactnessScale       float64
 	PenaltyOverloadedDay        float64
 	PenaltyLectureAfterPractice float64
 
@@ -26,18 +27,19 @@ type EvaluatorConfig struct {
 
 // DefaultConfig - настройки по умолчанию
 var DefaultConfig = EvaluatorConfig{
-	PenaltyGap:           -20.0,
-	PenaltyWrongRoomType: -10.0,
+	PenaltyGap:           -50.0,
+	PenaltyWrongRoomType: -15.0,
 
-	BonusPerfectRoomType: +5.0,
-	BonusDayWithoutGaps:  +20.0,
+	BonusPerfectRoomType:  +10.0,
+	BonusDayWithoutGaps:   +20.0,
+	BonusCompactnessScale: 1,
 
 	MaxClassesPerDay:     5,
 	PenaltyOverloadedDay: -100.0,
 
-	PenaltyLectureAfterPractice: -25.0,
+	PenaltyLectureAfterPractice: -100.0,
 
-	TanhScaleFactor: 0.3,
+	TanhScaleFactor: 0.5,
 	SoftScoreWeight: 0.5,
 }
 
@@ -177,7 +179,7 @@ func RuleCompactness(schedule *Schedule, data *EvalData) (int, float64) {
 		slot := data.SlotsMap[assignment.SlotID]
 		// Чем меньше номер периода (1, 2, 3...), тем больше бонус
 		// Например: 10 - номер периода. Пара в 08:00 (1) даст +9 баллов.
-		bonus += float64(11-slot.PeriodNumber) * 0.5
+		bonus += float64(11-slot.PeriodNumber) * data.Config.BonusCompactnessScale
 	}
 	return 0, bonus
 }

@@ -29,10 +29,10 @@ const getDefaultParams = () => ({
     is_soft_mutation_enabled: false,
     soft_mutation_rate: 0.10,
     soft_mutation_attempts: 10,
-    heat_stagnant_count: 10,
+    heat_stagnant_count: 20,
     heat_step_scale: 0.1,
     shock_stagnant_count: 80,
-    shock_mutation_rate: 0.2,
+    shock_mutation_rate: 0.1,
     shock_min_recovery_count: 20,
     shock_recovery_scale: 0.05,
   }
