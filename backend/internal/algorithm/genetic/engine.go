@@ -277,7 +277,7 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 		// Собираем список только тех аудиторий, куда влезает эта толпа
 		var validRooms []uint
 		for _, roomID := range eng.RoomIDs {
-			room := eng.Evaluator.Context.RoomsMap[roomID]
+			room := eng.Evaluator.Data.RoomsMap[roomID]
 			if room.Capacity >= studentsCount {
 				validRooms = append(validRooms, roomID)
 			}
@@ -341,7 +341,7 @@ func (eng *GeneticEngine) mutate(schedule *algorithm.Schedule, rate float64) {
 				// === МУТИРУЕМ ТОЛЬКО В ПОДХОДЯЩИЕ АУДИТОРИИ ===
 				var validRooms []uint
 				for _, roomID := range eng.RoomIDs {
-					if eng.Evaluator.Context.RoomsMap[roomID].Capacity >= assignment.StudentsCount {
+					if eng.Evaluator.Data.RoomsMap[roomID].Capacity >= assignment.StudentsCount {
 						validRooms = append(validRooms, roomID)
 					}
 				}

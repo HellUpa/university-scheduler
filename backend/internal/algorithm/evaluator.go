@@ -7,12 +7,12 @@ import (
 )
 
 type Evaluator struct {
-	Context *EvalContext
-	Rules   []Rule
+	Data  *EvalData
+	Rules []Rule
 }
 
 func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain.CourseClass) *Evaluator {
-	ctx := &EvalContext{
+	data := &EvalData{
 		Config:     DefaultConfig,
 		RoomsMap:   make(map[uint]*domain.Room),
 		SlotsMap:   make(map[uint]*domain.TimeSlot),
@@ -20,13 +20,13 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 
 	for i := range rooms {
-		ctx.RoomsMap[rooms[i].ID] = &rooms[i]
+		data.RoomsMap[rooms[i].ID] = &rooms[i]
 	}
 	for i := range slots {
-		ctx.SlotsMap[slots[i].ID] = &slots[i]
+		data.SlotsMap[slots[i].ID] = &slots[i]
 	}
 	for i := range classes {
-		ctx.ClassesMap[classes[i].ID] = &classes[i]
+		data.ClassesMap[classes[i].ID] = &classes[i]
 	}
 
 	rules := []Rule{
@@ -43,8 +43,8 @@ func NewEvaluator(rooms []domain.Room, slots []domain.TimeSlot, classes []domain
 	}
 
 	return &Evaluator{
-		Context: ctx,
-		Rules:   rules,
+		Data:  data,
+		Rules: rules,
 	}
 }
 
@@ -57,7 +57,7 @@ func (e *Evaluator) CountConflicts(schedule *Schedule) (hardConflicts int, softC
 
 	// 2. Прогоняем расписание через ВСЕ правила
 	for _, rule := range e.Rules {
-		h, s := rule(schedule, e.Context)
+		h, s := rule(schedule, e.Data)
 		hardConflicts += h
 		softConflicts += s
 	}
@@ -78,11 +78,11 @@ func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
 
 	// 2. Считаем бонусы с помощью Tanh (от 0 до 1)
 	// Формула: (tanh(k * score) + 1) / 2
-	softScoreNormalized := (math.Tanh(e.Context.Config.TanhScaleFactor*relativeSoftScore) + 1) / 2
+	softScoreNormalized := (math.Tanh(e.Data.Config.TanhScaleFactor*relativeSoftScore) + 1) / 2
 
 	// 3. Итоговый фитнес
 	// Теперь вес бонусов - это вес нормализованного значения
-	totalFitness := baseFitness * (1.0 + (softScoreNormalized * e.Context.Config.SoftScoreWeight))
+	totalFitness := baseFitness * (1.0 + (softScoreNormalized * e.Data.Config.SoftScoreWeight))
 
 	schedule.Fitness = totalFitness
 	return totalFitness
@@ -94,7 +94,7 @@ func (e *Evaluator) buildGroupDailySchedule(schedule *Schedule) {
 	schedule.GroupDailySchedule = make(map[uint]map[domain.DayOfWeek][]int)
 
 	for _, assignment := range schedule.Assignments {
-		slot := e.Context.SlotsMap[assignment.SlotID]
+		slot := e.Data.SlotsMap[assignment.SlotID]
 		for _, gid := range assignment.GroupIDs {
 			if schedule.GroupDailySchedule[gid] == nil {
 				schedule.GroupDailySchedule[gid] = make(map[domain.DayOfWeek][]int)
@@ -105,7 +105,7 @@ func (e *Evaluator) buildGroupDailySchedule(schedule *Schedule) {
 }
 
 // DebugConflicts выводит в консоль расшифровку всех жестких конфликтов
-func DebugConflicts(schedule *Schedule, ctx *EvalContext) {
+func DebugConflicts(schedule *Schedule, data *EvalData) {
 	fmt.Println("=== ДЕБАГ ЖЕСТКИХ КОНФЛИКТОВ ===")
 	roomUsage := make(map[struct{ S, R uint }]string)
 	instructorUsage := make(map[struct{ S, I uint }]string)
@@ -119,9 +119,9 @@ func DebugConflicts(schedule *Schedule, ctx *EvalContext) {
 			continue
 		}
 
-		cls := ctx.ClassesMap[assignment.ClassID]
-		room := ctx.RoomsMap[assignment.RoomID]
-		slot := ctx.SlotsMap[assignment.SlotID]
+		cls := data.ClassesMap[assignment.ClassID]
+		room := data.RoomsMap[assignment.RoomID]
+		slot := data.SlotsMap[assignment.SlotID]
 		dayTime := fmt.Sprintf("%s %s", slot.Day, slot.StartTime)
 
 		// 1. Вместимость

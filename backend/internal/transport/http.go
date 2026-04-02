@@ -234,9 +234,9 @@ func (h *Handler) GenerateScheduleGreedy(c *fiber.Ctx) error {
 func (h *Handler) formatScheduleResponse(schedule *algorithm.Schedule, evaluator *algorithm.Evaluator) []ScheduleItemResponse {
 	result := make([]ScheduleItemResponse, len(schedule.Assignments))
 	for i, assignment := range schedule.Assignments {
-		room := evaluator.Context.RoomsMap[assignment.RoomID]
-		slot := evaluator.Context.SlotsMap[assignment.SlotID]
-		cls := evaluator.Context.ClassesMap[assignment.ClassID]
+		room := evaluator.Data.RoomsMap[assignment.RoomID]
+		slot := evaluator.Data.SlotsMap[assignment.SlotID]
+		cls := evaluator.Data.ClassesMap[assignment.ClassID]
 
 		var groupNames []string
 		for _, g := range cls.Groups {

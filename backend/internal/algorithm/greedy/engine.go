@@ -119,7 +119,7 @@ func (eng *GreedyEngine) Run(isPrepared bool) (*algorithm.Schedule, error) {
 				}
 
 				// Хватает ли места в аудитории?
-				room := eng.Evaluator.Context.RoomsMap[roomID]
+				room := eng.Evaluator.Data.RoomsMap[roomID]
 				if room.Capacity < studentsCount {
 					continue
 				}

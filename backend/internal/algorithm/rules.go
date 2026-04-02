@@ -41,8 +41,8 @@ var DefaultConfig = EvaluatorConfig{
 	SoftScoreWeight: 0.5,
 }
 
-// EvalContext содержит все предзагруженные данные для быстрого доступа
-type EvalContext struct {
+// EvalData содержит все предзагруженные данные для быстрого доступа
+type EvalData struct {
 	Config     EvaluatorConfig
 	RoomsMap   map[uint]*domain.Room
 	SlotsMap   map[uint]*domain.TimeSlot
@@ -51,17 +51,17 @@ type EvalContext struct {
 
 // Rule - сигнатура функции-правила
 // Возвращает количество жестких конфликтов (hardConflicts) и баллы комфорта (softScore)
-type Rule func(schedule *Schedule, ctx *EvalContext) (int, float64)
+type Rule func(schedule *Schedule, data *EvalData) (int, float64)
 
 // ==========================================
 // РЕАЛИЗАЦИЯ ПРАВИЛ (RULES)
 // ==========================================
 
 // RuleCapacity проверяет вместимость аудиторий
-func RuleCapacity(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleCapacity(schedule *Schedule, data *EvalData) (int, float64) {
 	hardConflicts := 0
 	for _, assignment := range schedule.Assignments {
-		room := ctx.RoomsMap[assignment.RoomID]
+		room := data.RoomsMap[assignment.RoomID]
 		if room.Capacity < assignment.StudentsCount {
 			hardConflicts++
 		}
@@ -69,7 +69,7 @@ func RuleCapacity(schedule *Schedule, ctx *EvalContext) (int, float64) {
 	return hardConflicts, 0.0
 }
 
-func RuleUnassigned(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleUnassigned(schedule *Schedule, data *EvalData) (int, float64) {
 	assignedCount := 0
 	for _, assignment := range schedule.Assignments {
 		if assignment.SlotID != 0 || assignment.RoomID == 0 { // Считаем 0 как "не назначено"
@@ -82,7 +82,7 @@ func RuleUnassigned(schedule *Schedule, ctx *EvalContext) (int, float64) {
 }
 
 // RuleOverlaps проверяет накладки: одна аудитория/препод/группа в одно время
-func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleOverlaps(schedule *Schedule, data *EvalData) (int, float64) {
 	hardConflicts := 0
 	roomUsage := make(map[struct{ S, R uint }]bool)
 	instructorUsage := make(map[struct{ S, I uint }]bool)
@@ -90,7 +90,7 @@ func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 
 	for _, assignment := range schedule.Assignments {
 		// 1. Получаем ИСТИННЫЕ данные о классе
-		cls := ctx.ClassesMap[assignment.ClassID]
+		cls := data.ClassesMap[assignment.ClassID]
 
 		// Проверка аудитории
 		roomKey := struct{ S, R uint }{assignment.SlotID, assignment.RoomID}
@@ -121,23 +121,23 @@ func RuleOverlaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 }
 
 // RuleRoomType проверяет соответствие типа аудитории (Лекция/Лаба)
-func RuleRoomType(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleRoomType(schedule *Schedule, data *EvalData) (int, float64) {
 	softScore := 0.0
 	for _, assignment := range schedule.Assignments {
-		room := ctx.RoomsMap[assignment.RoomID]
-		cls := ctx.ClassesMap[assignment.ClassID]
+		room := data.RoomsMap[assignment.RoomID]
+		cls := data.ClassesMap[assignment.ClassID]
 
 		if room.Type == cls.RequiredRoomType {
-			softScore += ctx.Config.BonusPerfectRoomType
+			softScore += data.Config.BonusPerfectRoomType
 		} else {
-			softScore += ctx.Config.PenaltyWrongRoomType
+			softScore += data.Config.PenaltyWrongRoomType
 		}
 	}
 	return 0, softScore
 }
 
 // RuleGaps анализирует "окна" в расписании студентов
-func RuleGaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleGaps(schedule *Schedule, data *EvalData) (int, float64) {
 	softScore := 0.0
 
 	for _, daysMap := range schedule.GroupDailySchedule {
@@ -152,14 +152,14 @@ func RuleGaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 				diff := periods[i] - periods[i-1]
 				if diff > 1 {
 					gapsCount := diff - 1
-					softScore += float64(gapsCount) * ctx.Config.PenaltyGap
+					softScore += float64(gapsCount) * data.Config.PenaltyGap
 					hasGaps = true
 				}
 			}
 
 			// Если день загружен, но окон нет - даем супер-бонус
 			if !hasGaps {
-				softScore += ctx.Config.BonusDayWithoutGaps
+				softScore += data.Config.BonusDayWithoutGaps
 			}
 		}
 	}
@@ -167,14 +167,14 @@ func RuleGaps(schedule *Schedule, ctx *EvalContext) (int, float64) {
 }
 
 // RuleCompactness награждает за то, что занятия стоят в начале дня
-func RuleCompactness(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleCompactness(schedule *Schedule, data *EvalData) (int, float64) {
 	bonus := 0.0
 	for _, assignment := range schedule.Assignments {
 		if assignment.SlotID == 0 {
 			continue
 		}
 
-		slot := ctx.SlotsMap[assignment.SlotID]
+		slot := data.SlotsMap[assignment.SlotID]
 		// Чем меньше номер периода (1, 2, 3...), тем больше бонус
 		// Например: 10 - номер периода. Пара в 08:00 (1) даст +9 баллов.
 		bonus += float64(11-slot.PeriodNumber) * 0.5
@@ -183,7 +183,7 @@ func RuleCompactness(schedule *Schedule, ctx *EvalContext) (int, float64) {
 }
 
 // RuleOverloadedDay штрафует за слишком большое количество занятий у группы в один день.
-func RuleOverloadedDay(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleOverloadedDay(schedule *Schedule, data *EvalData) (int, float64) {
 	softScore := 0.0
 
 	// Проходим по расписанию каждой группы
@@ -193,11 +193,11 @@ func RuleOverloadedDay(schedule *Schedule, ctx *EvalContext) (int, float64) {
 			numClasses := len(slotsInDay)
 
 			// Если количество пар в день превышает "комфортное"
-			if numClasses > ctx.Config.MaxClassesPerDay {
+			if numClasses > data.Config.MaxClassesPerDay {
 				// Штраф может быть прогрессивным.
 				// За 5-ю пару - один штраф, за 6-ю - уже два, и т.д.
-				overload := numClasses - ctx.Config.MaxClassesPerDay
-				penalty := float64(overload) * ctx.Config.PenaltyOverloadedDay
+				overload := numClasses - data.Config.MaxClassesPerDay
+				penalty := float64(overload) * data.Config.PenaltyOverloadedDay
 				softScore += penalty
 			}
 		}
@@ -208,13 +208,13 @@ func RuleOverloadedDay(schedule *Schedule, ctx *EvalContext) (int, float64) {
 
 // RuleLectureBeforePractice штрафует, если практическое занятие по предмету
 // стоит в расписании раньше лекции.
-func RuleLectureBeforePractice(schedule *Schedule, ctx *EvalContext) (int, float64) {
+func RuleLectureBeforePractice(schedule *Schedule, data *EvalData) (int, float64) {
 	softScore := 0.0
 
 	// 1. Группируем все занятия по ID предмета
 	assignmentsBySubject := make(map[uint][]*Assignment)
 	for _, assign := range schedule.Assignments {
-		classInfo := ctx.ClassesMap[assign.ClassID]
+		classInfo := data.ClassesMap[assign.ClassID]
 		subjectID := classInfo.SubjectID
 		assignmentsBySubject[subjectID] = append(assignmentsBySubject[subjectID], assign)
 	}
@@ -226,7 +226,7 @@ func RuleLectureBeforePractice(schedule *Schedule, ctx *EvalContext) (int, float
 
 		// Разделяем на лекции и практики
 		for _, assign := range assignments {
-			classInfo := ctx.ClassesMap[assign.ClassID]
+			classInfo := data.ClassesMap[assign.ClassID]
 			if classInfo.IsLecture {
 				lectureSlots = append(lectureSlots, assign.SlotID)
 			} else {
@@ -247,7 +247,7 @@ func RuleLectureBeforePractice(schedule *Schedule, ctx *EvalContext) (int, float
 			// Проверяем каждую практику
 			for _, pSlot := range practiceSlots {
 				if pSlot < minLectureSlot {
-					softScore += ctx.Config.PenaltyLectureAfterPractice
+					softScore += data.Config.PenaltyLectureAfterPractice
 				}
 			}
 		}
