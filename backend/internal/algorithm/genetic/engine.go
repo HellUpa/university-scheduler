@@ -30,8 +30,9 @@ type GeneticEngine struct {
 	EliteSize      float64
 	TournamentSize int
 	// Мягкая мутация (без жестких конфликтов)
-	SoftMutationRate     float64
-	SoftMutationAttempts int
+	IsSoftMutationEnabled bool
+	SoftMutationRate      float64
+	SoftMutationAttempts  int
 	// Нагрев мутации при стагнации
 	HeatStagnantCount int
 	HeatStepScale     float64
@@ -60,6 +61,7 @@ func NewEngine(db *gorm.DB) *GeneticEngine {
 
 		EliteSize:             0.05,
 		TournamentSize:        3,
+		IsSoftMutationEnabled: false,
 		SoftMutationRate:      0.10,
 		SoftMutationAttempts:  10,
 		HeatStagnantCount:     10,
@@ -214,7 +216,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 ) (mutationFn MutationFunc, mutationRate float64, newStagnantGens int, newRecoveryCounter int) {
 
 	// --- Фаза 1: Оптимизация (валидное решение найдено) ---
-	if bestFitness >= 1.0 {
+	if eng.IsSoftMutationEnabled && bestFitness >= 1.0 {
 		// Мы в режиме улучшения мягких ограничений.
 		// Логика нагрева/шока здесь не нужна, она слишком агрессивна.
 		// Просто используем мягкую мутацию с фиксированным шансом.
@@ -222,7 +224,6 @@ func (eng *GeneticEngine) determineMutationStrategy(
 	}
 
 	// --- Фаза 2: Поиск (ищем валидное решение) ---
-	// Здесь работает твоя логика "нагрев и шок"
 
 	// Если мы в фазе восстановления после шока - ничего не делаем
 	if recoveryCounter > 0 {

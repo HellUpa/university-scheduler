@@ -25,11 +25,24 @@
   },
   "settings": {
     "title": "⚙️ Settings",
+    "all_title": "GA parameters",
     "main_title": "Basic parameters",
     "adv_title": "Advanced",
     "rules_title": "Rules / Constraints",
 
-    "btn_start": "Run GA",
+    "btn_start": "Run",
+    "btn_reset": "⟲ Reset",
+
+    "scroll_title": "Schedule Quality",
+    "scroll_desc": "Balance between speed and search depth",
+    "scroll_fast": "Fast",
+    "scroll_optimal": "Optimal",
+    "scroll_max": "Maximum",
+
+    "warn_title": "Caution!",
+    "warn_desc": "Changing algorithm parameters may degrade the schedule or increase calculation time. Only change them if you know what you're doing.",
+    "warn_btn_ok": "I understand, open",
+    "warn_btn_cancel": "Cancel",
 
     "pop_size": "Population size",
     "pop_size_tip": "The number of schedule variants in one generation. Increasing it beyond a certain minimum threshold makes little sense.",
@@ -42,6 +55,8 @@
     "elitism_tip": "The percentage of the best individuals passing to the new generation unchanged.",
     "tournament": "Tournament size",
     "tournament_tip": "The number of individuals participating in the tournament to select parents.",
+    "soft_mutation": "Soft mutation",
+    "soft_mutation_tip": "Soft mutation is used when there are no hard conflicts. Disables mutations that violate hard constraints. May lead to local optima. Disabled by default.",
     "soft_mutation_rate": "Soft mutation rate",
     "soft_mutation_rate_tip": "Soft mutation is applied when there are no hard conflicts. The rate can be set higher than the normal mutation rate.",
     "soft_mutation_attempts": "Soft mutation attempts",

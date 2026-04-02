@@ -2,8 +2,9 @@
 import { ref, reactive, computed, shallowRef } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import SettingInput from './components/SettingInput.vue'
+import SettingToggle from './components/SettingToggle.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
-import { useI18n } from 'vue-i18n' // <-- Обязательно импортируем хук
+import { useI18n } from 'vue-i18n'
 
 
 Chart.register(...registerables)
@@ -16,32 +17,53 @@ interface ScheduleItem {
   subject: string; instructor: string; room: string; day: string; time: string; groups: string[]
 }
 
-const params = reactive({
+const getDefaultParams = () => ({
   main_options: {
-    population_size: 200,
+    population_size: 150,
     generations: 500,
     mutation_rate: 0.001,
   },
   additional_options: {
     elitism: 0.05,
-	  tournament_size: 3,
-	  soft_mutation_rate: 0.10,
-	  soft_mutation_attempts: 10,
-	  heat_stagnant_count: 10,
-	  heat_step_scale: 0.1,
-	  shock_stagnant_count: 80,
-	  shock_mutation_rate: 0.2,
-	  shock_min_recovery_count: 20,
-	  shock_recovery_scale: 0.05,
+    tournament_size: 3,
+    is_soft_mutation_enabled: false,
+    soft_mutation_rate: 0.10,
+    soft_mutation_attempts: 10,
+    heat_stagnant_count: 10,
+    heat_step_scale: 0.1,
+    shock_stagnant_count: 80,
+    shock_mutation_rate: 0.2,
+    shock_min_recovery_count: 20,
+    shock_recovery_scale: 0.05,
   }
 })
 
+// Инициализируем
+const params = ref(getDefaultParams())
+
+// Функция сброса
+const resetParams = () => {
+  params.value = getDefaultParams()
+}
+
+const scrollBarParams = {
+  min: 50,
+  max: 600,
+  step: 10,
+}
+// Функция автоматического расчета поколений (в 3 раза больше популяции)
+const updateGenerations = () => {
+    params.value.main_options.generations = params.value.main_options.population_size * 3;
+};
+
 const isSettingsOpen = ref(false) // Состояние боковой панели
 const expandedSections = reactive({
+  all: false,
   main: true,      // Базовые открыты по умолчанию
   advanced: false, // Продвинутые скрыты
   rules: false     // Правила скрыты
 })
+const isAdvancedUnlocked = ref(false); // Флаг разблокировки экспертных настроек
 const isGenerating = ref(false)
 const loadingText = ref('Оптимизация расписания...')
 const rawSchedule = ref<ScheduleItem[]>([])
@@ -68,8 +90,8 @@ const generateGreedy = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/schedule/generate/greedy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      // headers: { 'Content-Type': 'application/json' },
+      // body: JSON.stringify(params)
     })
     const data = await response.json()
     stats.fitness = data.fitness_score; stats.time = data.time_taken_ms; stats.algo = 'Greedy'; stats.show = true
@@ -87,7 +109,7 @@ const generateGenetic = () => {
 
   const socket = new WebSocket(`${WS_BASE_URL}/api/v1/schedule/generate/genetic/ws`)
 
-  socket.onopen = () => socket.send(JSON.stringify(params))
+  socket.onopen = () => socket.send(JSON.stringify(params.value))
   socket.onmessage = (event) => {
     const msg = JSON.parse(event.data)
     if (msg.type === 'progress') {
@@ -246,170 +268,265 @@ const scheduleMatrix = computed(() => {
 
       <!-- Контент сайдбара (скроллится если много настроек) -->
       <div class="p-5 overflow-y-auto flex-1 space-y-2">
+        <div class="mb-8 p-5 bg-gray-50 rounded-xl border border-gray-200">
+          <div class="flex justify-between items-end mb-4">
+              <div>
+                  <h3 class="text-md font-bold text-gray-800">{{ t('settings.scroll_title') }}</h3>
+                  <p class="text-xs text-gray-500 mt-1">{{ t('settings.scroll_desc') }}</p>
+              </div>
+          </div>
         
-        <!-- Секция 1: Базовые настройки -->
-        <div class="border-b border-gray-100 pb-2">
-          <button 
-            @click="expandedSections.main = !expandedSections.main" 
-            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
-          >
-            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
-                  :class="expandedSections.main ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              {{ t('settings.main_title') }}
-            </span>
-            <!-- Иконка стрелочки (крутится при открытии) -->
-            <svg xmlns="http://www.w3.org/2000/svg" 
-                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                 :class="{ 'rotate-180': expandedSections.main }" 
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          
-          <!-- Контент скрывается/показывается -->
-          <div v-show="expandedSections.main" class="space-y-4 pt-2 pb-4">
-            <SettingInput 
-              v-model="params.main_options.population_size" 
-              :label="t('settings.pop_size')" 
-              :tooltip="t('settings.pop_size_tip')" 
-            />
-            
-            <SettingInput 
-              v-model="params.main_options.generations" 
-              :label="t('settings.generations')" 
-              :tooltip="t('settings.generations_tip')" 
-            />
-            
-            <SettingInput 
-              v-model="params.main_options.mutation_rate" 
-              :label="t('settings.mutation')" 
-              :tooltip="t('settings.mutation_tip')" 
-              step="0.001"
-            />
+          <div class="relative w-full">
+              <input 
+                  type="range" 
+                  :min="scrollBarParams.min" 
+                  :max="scrollBarParams.max" 
+                  :step="scrollBarParams.step" 
+                  v-model.number="params.main_options.population_size"
+                  @input="updateGenerations"
+                  class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+              <!-- Подписи под ползунком -->
+              <div class="flex justify-between text-xs text-gray-500 mt-2 font-medium">
+                  <span>{{ t('settings.scroll_fast') }}</span>
+                  <span>{{ t('settings.scroll_optimal') }}</span>
+                  <span>{{ t('settings.scroll_max') }}</span>
+              </div>
           </div>
         </div>
 
-        <!-- Секция 2: Продвинутые настройки -->
-        <div class="border-b border-gray-100 pb-2">
+      <!-- ПРОДВИНУТЫЕ НАСТРОЙКИ -->
+      <div class="border-t border-b border-gray-100 py-2">
           <button 
-            @click="expandedSections.advanced = !expandedSections.advanced" 
-            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
-          >
-            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
-                  :class="expandedSections.advanced ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              {{ t('settings.adv_title') }}
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" 
-                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                 :class="{ 'rotate-180': expandedSections.advanced }" 
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+        @click="expandedSections.all = !expandedSections.all" 
+        class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+    >
+        <span class="text-sm font-bold uppercase tracking-wider transition-colors"
+              :class="expandedSections.all ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+          {{ t('settings.all_title') }}
+        </span>
+        <svg xmlns="http://www.w3.org/2000/svg" 
+             class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+             :class="{ 'rotate-180': expandedSections.all }" 
+             fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+    </button>
 
-          <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">        
-            <SettingInput 
-              v-model="params.additional_options.elitism" 
-              :label="t('settings.elitism')" 
-              :tooltip="t('settings.elitism_tip')" 
-              step="0.01" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.tournament_size" 
-              :label="t('settings.tournament')" 
-              :tooltip="t('settings.tournament_tip')" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.soft_mutation_rate" 
-              :label="t('settings.soft_mutation_rate')" 
-              :tooltip="t('settings.soft_mutation_rate_tip')" 
-              step="0.1"
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.soft_mutation_attempts" 
-              :label="t('settings.soft_mutation_attempts')" 
-              :tooltip="t('settings.soft_mutation_attempts_tip')" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.heat_stagnant_count" 
-              :label="t('settings.heat_stagnant_count')" 
-              :tooltip="t('settings.heat_stagnant_count_tip')" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.heat_step_scale" 
-              :label="t('settings.heat_step_scale')" 
-              :tooltip="t('settings.heat_step_scale_tip')" 
-              step="0.01"
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.shock_stagnant_count" 
-              :label="t('settings.shock_stagnant_count')" 
-              :tooltip="t('settings.shock_stagnant_count_tip')" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.shock_mutation_rate" 
-              :label="t('settings.shock_mutation_rate')" 
-              :tooltip="t('settings.shock_mutation_rate_tip')" 
-              step="0.01" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.shock_min_recovery_count" 
-              :label="t('settings.shock_min_recovery_count')" 
-              :tooltip="t('settings.shock_min_recovery_count_tip')" 
-            />
-
-            <SettingInput 
-              v-model="params.additional_options.shock_recovery_scale" 
-              :label="t('settings.shock_recovery_scale')" 
-              :tooltip="t('settings.shock_recovery_scale_tip')" 
-              step="0.01" 
-            />
-
-          </div>
+    <!-- Содержимое аккордеона -->
+    <div v-show="expandedSections.all" class="pt-2 pb-4">
+        
+        <!-- СОСТОЯНИЕ 1: Блок предупреждения (показываем, если НЕ разблокировано) -->
+        <div v-if="!isAdvancedUnlocked" class="bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-sm">
+            <div class="flex items-start mb-4">
+                <!-- Иконка Alert -->
+                <svg class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div class="ml-3">
+                    <h4 class="text-sm font-semibold text-amber-800">{{ t('settings.warn_title') }}</h4>
+                    <p class="text-xs text-amber-700 mt-1 leading-relaxed">
+                        {{ t('settings.warn_desc') }}
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Кнопки действий -->
+            <div class="flex space-x-2 pl-8">
+                <button 
+                    @click="isAdvancedUnlocked = true" 
+                    class="text-xs font-medium px-3 py-1.5 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors"
+                >
+                    {{ t('settings.warn_btn_ok') }}
+                </button>
+                <button 
+                    @click="expandedSections.all = false" 
+                    class="text-xs font-medium px-3 py-1.5 bg-amber-100 text-amber-800 rounded-md hover:bg-amber-200 transition-colors"
+                >
+                    {{ t('settings.warn_btn_cancel') }}
+                </button>
+            </div>
         </div>
+        
+        <div v-else class="space-y-5 transition-opacity duration-300 animate-fade-in">
+            <!-- Секция 1: Базовые настройки -->
+            <div class="pl-2 border-b border-gray-100 pb-2">
+              <button 
+                @click="expandedSections.main = !expandedSections.main" 
+                class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+              >
+                <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                      :class="expandedSections.main ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+                  {{ t('settings.main_title') }}
+                </span>
+                <!-- Иконка стрелочки (крутится при открытии) -->
+                <svg xmlns="http://www.w3.org/2000/svg" 
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                     :class="{ 'rotate-180': expandedSections.main }" 
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-        <!-- Секция 3: Правила (Заглушка) -->
-        <div class="pb-2">
-          <button 
-            @click="expandedSections.rules = !expandedSections.rules" 
-            class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
-          >
-            <span class="text-xs font-bold uppercase tracking-wider transition-colors"
-                  :class="expandedSections.rules ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
-              {{ t('settings.rules_title') }}
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" 
-                 class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                 :class="{ 'rotate-180': expandedSections.rules }" 
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+              <!-- Контент скрывается/показывается -->
+              <div v-show="expandedSections.main" class="space-y-4 pt-2 pb-4">
+                <SettingInput 
+                  v-model="params.main_options.population_size" 
+                  :label="t('settings.pop_size')" 
+                  :tooltip="t('settings.pop_size_tip')" 
+                />
 
-          <div v-show="expandedSections.rules" class="pt-2 pb-4">
-          <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-400">
-            {{ t('settings.rules_dev') }}
+                <SettingInput 
+                  v-model="params.main_options.generations" 
+                  :label="t('settings.generations')" 
+                  :tooltip="t('settings.generations_tip')" 
+                />
+
+                <SettingInput 
+                  v-model="params.main_options.mutation_rate" 
+                  :label="t('settings.mutation')" 
+                  :tooltip="t('settings.mutation_tip')" 
+                  step="0.001"
+                />
+              </div>
+            </div>
+
+            <!-- Секция 2: Продвинутые настройки -->
+            <div class="pl-2 border-b border-gray-100 pb-2">
+              <button 
+                @click="expandedSections.advanced = !expandedSections.advanced" 
+                class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+              >
+                <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                      :class="expandedSections.advanced ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+                  {{ t('settings.adv_title') }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" 
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                     :class="{ 'rotate-180': expandedSections.advanced }" 
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            
+              <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">        
+                <SettingInput 
+                  v-model="params.additional_options.elitism" 
+                  :label="t('settings.elitism')" 
+                  :tooltip="t('settings.elitism_tip')" 
+                  step="0.01" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.tournament_size" 
+                  :label="t('settings.tournament')" 
+                  :tooltip="t('settings.tournament_tip')" 
+                />
+
+                <SettingToggle 
+                  v-model="params.additional_options.is_soft_mutation_enabled" 
+                  :label="t('settings.soft_mutation')" 
+                  :tooltip="t('settings.soft_mutation_tip')"
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.soft_mutation_rate" 
+                  :label="t('settings.soft_mutation_rate')" 
+                  :tooltip="t('settings.soft_mutation_rate_tip')" 
+                  step="0.1"
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.soft_mutation_attempts" 
+                  :label="t('settings.soft_mutation_attempts')" 
+                  :tooltip="t('settings.soft_mutation_attempts_tip')" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.heat_stagnant_count" 
+                  :label="t('settings.heat_stagnant_count')" 
+                  :tooltip="t('settings.heat_stagnant_count_tip')" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.heat_step_scale" 
+                  :label="t('settings.heat_step_scale')" 
+                  :tooltip="t('settings.heat_step_scale_tip')" 
+                  step="0.01"
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.shock_stagnant_count" 
+                  :label="t('settings.shock_stagnant_count')" 
+                  :tooltip="t('settings.shock_stagnant_count_tip')" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.shock_mutation_rate" 
+                  :label="t('settings.shock_mutation_rate')" 
+                  :tooltip="t('settings.shock_mutation_rate_tip')" 
+                  step="0.01" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.shock_min_recovery_count" 
+                  :label="t('settings.shock_min_recovery_count')" 
+                  :tooltip="t('settings.shock_min_recovery_count_tip')" 
+                />
+              
+                <SettingInput 
+                  v-model="params.additional_options.shock_recovery_scale" 
+                  :label="t('settings.shock_recovery_scale')" 
+                  :tooltip="t('settings.shock_recovery_scale_tip')" 
+                  step="0.01" 
+                />
+              
+              </div>
+            </div>
+
+            <!-- Секция 3: Правила (Заглушка) -->
+            <div class="pl-2 border-b border-gray-100 pb-2">
+              <button 
+                @click="expandedSections.rules = !expandedSections.rules" 
+                class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
+              >
+                <span class="text-xs font-bold uppercase tracking-wider transition-colors"
+                      :class="expandedSections.rules ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
+                  {{ t('settings.rules_title') }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" 
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
+                     :class="{ 'rotate-180': expandedSections.rules }" 
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+            <div v-show="expandedSections.rules" class="pt-2 pb-4">
+            <div class="p-4 bg-gray-50 border border-dashed border-gray-300 rounded-lg text-center text-sm text-gray-400">
+              {{ t('settings.rules_dev') }}
+            </div>
           </div>
+
+            </div>
+
+            <!-- Сброс настроек  -->
+            <div class="px-5 pb-2 flex gap-2">
+              <button @click="resetParams" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors">
+                {{ t('settings.btn_reset') }}
+              </button>
+            </div>
+        </div>
+    </div>
+        <!-- Подвал сайдбара (кнопки быстрого старта прямо оттуда) -->
+        <div class="p-5 flex gap-2">
+          <button @click="generateGenetic" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors">
+            {{ t('settings.btn_start') }}
+          </button>
         </div>
 
       </div>
-      
-      <!-- Подвал сайдбара (кнопки быстрого старта прямо оттуда) -->
-      <div class="p-5 border-t border-gray-100 bg-gray-50 flex gap-2">
-        <button @click="generateGenetic" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors">
-          {{ t('settings.btn_start') }}
-        </button>
-      </div>
-
     </div>
   </div>
-</div>
+  </div>
 </template>

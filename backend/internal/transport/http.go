@@ -31,8 +31,9 @@ type AdditionalOptions struct {
 	EliteSize      float64 `json:"elitism"`
 	TournamentSize int     `json:"tournament_size"`
 	// Мягкая мутация (без жестких конфликтов)
-	SoftMutationRate     float64 `json:"soft_mutation_rate"`
-	SoftMutationAttempts int     `json:"soft_mutation_attempts"`
+	IsSoftMutationEnabled bool    `json:"is_soft_mutation_enabled"`
+	SoftMutationRate      float64 `json:"soft_mutation_rate"`
+	SoftMutationAttempts  int     `json:"soft_mutation_attempts"`
 	// Нагрев мутации при стагнации
 	HeatStagnantCount int     `json:"heat_stagnant_count"`
 	HeatStepScale     float64 `json:"heat_step_scale"`
@@ -44,7 +45,6 @@ type AdditionalOptions struct {
 }
 
 type RuleOptions struct {
-	
 }
 
 // Структура для приема параметров алгоритма из тела запроса (POST JSON)
@@ -77,6 +77,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 		AdditionalOptions: AdditionalOptions{
 			EliteSize:             0.05,
 			TournamentSize:        3,
+			IsSoftMutationEnabled: false,
 			SoftMutationRate:      0.10,
 			SoftMutationAttempts:  10,
 			HeatStagnantCount:     10,
@@ -101,6 +102,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	engine.BaseMutationRate = req.MainOptions.MutationRate
 	engine.EliteSize = req.AdditionalOptions.EliteSize
 	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.IsSoftMutationEnabled = req.AdditionalOptions.IsSoftMutationEnabled
 	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
 	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts
 	engine.HeatStagnantCount = req.AdditionalOptions.HeatStagnantCount
@@ -144,6 +146,7 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 		AdditionalOptions: AdditionalOptions{
 			EliteSize:             0.05,
 			TournamentSize:        3,
+			IsSoftMutationEnabled: false,
 			SoftMutationRate:      0.10,
 			SoftMutationAttempts:  10,
 			HeatStagnantCount:     10,
@@ -167,6 +170,7 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 	engine.BaseMutationRate = req.MainOptions.MutationRate
 	engine.EliteSize = req.AdditionalOptions.EliteSize
 	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.IsSoftMutationEnabled = req.AdditionalOptions.IsSoftMutationEnabled
 	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
 	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts
 	engine.HeatStagnantCount = req.AdditionalOptions.HeatStagnantCount
