@@ -27,7 +27,7 @@ const selectLanguage = (code: string) => {
     <!-- Кнопка открытия меню -->
     <button 
       @click="isOpen = !isOpen"
-      class="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      class="flex items-center gap-2 px-3 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
     >
       <img :src="currentLang?.flag" alt="flag" class="w-5 h-auto rounded-[2px] shadow-sm">
       <span class="hidden sm:block">{{ currentLang?.code.toUpperCase() }}</span>

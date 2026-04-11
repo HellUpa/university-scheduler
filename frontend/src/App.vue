@@ -9,7 +9,7 @@ import { useI18n } from 'vue-i18n'
 
 Chart.register(...registerables)
 
-const { t } = useI18n() 
+const { t } = useI18n()
 const API_BASE_URL = 'http://localhost:8080'
 const WS_BASE_URL = 'ws://localhost:8080'
 
@@ -32,7 +32,7 @@ const getDefaultParams = () => ({
     heat_stagnant_count: 20,
     heat_step_scale: 0.1,
     shock_stagnant_count: 80,
-    shock_mutation_rate: 0.1,
+    shock_mutation_rate: 0.05,
     shock_min_recovery_count: 20,
     shock_recovery_scale: 0.05,
   }
@@ -96,7 +96,7 @@ const generateGreedy = async () => {
     const data = await response.json()
     stats.fitness = data.fitness_score; stats.time = data.time_taken_ms; stats.algo = 'Greedy'; stats.show = true
     rawSchedule.value = data.schedule
-  } catch (e) { alert("Ошибка: " + e) } 
+  } catch (e) { alert("Ошибка: " + e) }
   finally { isGenerating.value = false }
 }
 
@@ -104,7 +104,7 @@ const generateGenetic = () => {
   isGenerating.value = true; stats.show = false; rawSchedule.value = []
   loadingText.value = '🧬 Инициализация эволюции...'
   isSettingsOpen.value = false
-  
+
   setTimeout(() => initChart(), 0)
 
   const socket = new WebSocket(`${WS_BASE_URL}/api/v1/schedule/generate/genetic/ws`)
@@ -153,17 +153,17 @@ const scheduleMatrix = computed(() => {
 
 <template>
   <div class="bg-gray-50 min-h-screen text-gray-800 font-sans pb-10 relative overflow-x-hidden">
-    
+
     <!-- Главный контейнер -->
     <div class="mx-auto px-4 py-8 w-[96%] max-w-[1600px] transition-all duration-300" :class="{ 'pr-96': isSettingsOpen }">
-      
+
       <!-- Header -->
       <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100 gap-4">
         <div>
           <h1 class="text-3xl font-extrabold text-indigo-600 tracking-tight">{{ t('header.title') }}</h1>
           <p class="text-sm text-gray-500 mt-1">{{ t('header.subtitle') }}</p>
         </div>
-        
+
         <div class="flex gap-3 items-center">
           <button @click="generateGreedy" :disabled="isGenerating" class="px-5 py-2.5 bg-gray-800 hover:bg-gray-900 text-white font-medium rounded-lg shadow-sm disabled:opacity-50">
             {{ t('header.btn_greedy') }}
@@ -255,7 +255,7 @@ const scheduleMatrix = computed(() => {
     <!-- Боковое меню (Sidebar) -->
     <div class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out border-l border-gray-200 flex flex-col"
          :class="isSettingsOpen ? 'translate-x-0' : 'translate-x-full'">
-      
+
       <!-- Заголовок сайдбара -->
       <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
         <h2 class="text-lg font-bold text-gray-800 flex items-center gap-2">
@@ -275,13 +275,13 @@ const scheduleMatrix = computed(() => {
                   <p class="text-xs text-gray-500 mt-1">{{ t('settings.scroll_desc') }}</p>
               </div>
           </div>
-        
+
           <div class="relative w-full">
-              <input 
-                  type="range" 
-                  :min="scrollBarParams.min" 
-                  :max="scrollBarParams.max" 
-                  :step="scrollBarParams.step" 
+              <input
+                  type="range"
+                  :min="scrollBarParams.min"
+                  :max="scrollBarParams.max"
+                  :step="scrollBarParams.step"
                   v-model.number="params.main_options.population_size"
                   @input="updateGenerations"
                   class="w-full h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -297,17 +297,17 @@ const scheduleMatrix = computed(() => {
 
       <!-- ПРОДВИНУТЫЕ НАСТРОЙКИ -->
       <div class="border-t border-b border-gray-100 py-2">
-          <button 
-        @click="expandedSections.all = !expandedSections.all" 
+          <button
+        @click="expandedSections.all = !expandedSections.all"
         class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
     >
         <span class="text-sm font-bold uppercase tracking-wider transition-colors"
               :class="expandedSections.all ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
           {{ t('settings.all_title') }}
         </span>
-        <svg xmlns="http://www.w3.org/2000/svg" 
-             class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-             :class="{ 'rotate-180': expandedSections.all }" 
+        <svg xmlns="http://www.w3.org/2000/svg"
+             class="w-4 h-4 text-gray-400 transition-transform duration-300"
+             :class="{ 'rotate-180': expandedSections.all }"
              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -315,7 +315,7 @@ const scheduleMatrix = computed(() => {
 
     <!-- Содержимое аккордеона -->
     <div v-show="expandedSections.all" class="pt-2 pb-4">
-        
+
         <!-- СОСТОЯНИЕ 1: Блок предупреждения (показываем, если НЕ разблокировано) -->
         <div v-if="!isAdvancedUnlocked" class="bg-amber-50 border border-amber-200 rounded-lg p-4 shadow-sm">
             <div class="flex items-start mb-4">
@@ -330,29 +330,29 @@ const scheduleMatrix = computed(() => {
                     </p>
                 </div>
             </div>
-            
+
             <!-- Кнопки действий -->
             <div class="flex space-x-2 pl-8">
-                <button 
-                    @click="isAdvancedUnlocked = true" 
+                <button
+                    @click="isAdvancedUnlocked = true"
                     class="text-xs font-medium px-3 py-1.5 bg-amber-500 text-white rounded-md hover:bg-amber-600 transition-colors"
                 >
                     {{ t('settings.warn_btn_ok') }}
                 </button>
-                <button 
-                    @click="expandedSections.all = false" 
+                <button
+                    @click="expandedSections.all = false"
                     class="text-xs font-medium px-3 py-1.5 bg-amber-100 text-amber-800 rounded-md hover:bg-amber-200 transition-colors"
                 >
                     {{ t('settings.warn_btn_cancel') }}
                 </button>
             </div>
         </div>
-        
+
         <div v-else class="space-y-5 transition-opacity duration-300 animate-fade-in">
             <!-- Секция 1: Базовые настройки -->
             <div class="pl-2 border-b border-gray-100 pb-2">
-              <button 
-                @click="expandedSections.main = !expandedSections.main" 
+              <button
+                @click="expandedSections.main = !expandedSections.main"
                 class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
               >
                 <span class="text-xs font-bold uppercase tracking-wider transition-colors"
@@ -360,9 +360,9 @@ const scheduleMatrix = computed(() => {
                   {{ t('settings.main_title') }}
                 </span>
                 <!-- Иконка стрелочки (крутится при открытии) -->
-                <svg xmlns="http://www.w3.org/2000/svg" 
-                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                     :class="{ 'rotate-180': expandedSections.main }" 
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300"
+                     :class="{ 'rotate-180': expandedSections.main }"
                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -370,22 +370,22 @@ const scheduleMatrix = computed(() => {
 
               <!-- Контент скрывается/показывается -->
               <div v-show="expandedSections.main" class="space-y-4 pt-2 pb-4">
-                <SettingInput 
-                  v-model="params.main_options.population_size" 
-                  :label="t('settings.pop_size')" 
-                  :tooltip="t('settings.pop_size_tip')" 
+                <SettingInput
+                  v-model="params.main_options.population_size"
+                  :label="t('settings.pop_size')"
+                  :tooltip="t('settings.pop_size_tip')"
                 />
 
-                <SettingInput 
-                  v-model="params.main_options.generations" 
-                  :label="t('settings.generations')" 
-                  :tooltip="t('settings.generations_tip')" 
+                <SettingInput
+                  v-model="params.main_options.generations"
+                  :label="t('settings.generations')"
+                  :tooltip="t('settings.generations_tip')"
                 />
 
-                <SettingInput 
-                  v-model="params.main_options.mutation_rate" 
-                  :label="t('settings.mutation')" 
-                  :tooltip="t('settings.mutation_tip')" 
+                <SettingInput
+                  v-model="params.main_options.mutation_rate"
+                  :label="t('settings.mutation')"
+                  :tooltip="t('settings.mutation_tip')"
                   step="0.001"
                 />
               </div>
@@ -393,110 +393,110 @@ const scheduleMatrix = computed(() => {
 
             <!-- Секция 2: Продвинутые настройки -->
             <div class="pl-2 border-b border-gray-100 pb-2">
-              <button 
-                @click="expandedSections.advanced = !expandedSections.advanced" 
+              <button
+                @click="expandedSections.advanced = !expandedSections.advanced"
                 class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
               >
                 <span class="text-xs font-bold uppercase tracking-wider transition-colors"
                       :class="expandedSections.advanced ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
                   {{ t('settings.adv_title') }}
                 </span>
-                <svg xmlns="http://www.w3.org/2000/svg" 
-                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                     :class="{ 'rotate-180': expandedSections.advanced }" 
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300"
+                     :class="{ 'rotate-180': expandedSections.advanced }"
                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-            
-              <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">        
-                <SettingInput 
-                  v-model="params.additional_options.elitism" 
-                  :label="t('settings.elitism')" 
-                  :tooltip="t('settings.elitism_tip')" 
-                  step="0.01" 
-                />
-              
-                <SettingInput 
-                  v-model="params.additional_options.tournament_size" 
-                  :label="t('settings.tournament')" 
-                  :tooltip="t('settings.tournament_tip')" 
-                />
 
-                <SettingToggle 
-                  v-model="params.additional_options.is_soft_mutation_enabled" 
-                  :label="t('settings.soft_mutation')" 
-                  :tooltip="t('settings.soft_mutation_tip')"
-                />
-              
-                <SettingInput 
-                  v-model="params.additional_options.soft_mutation_rate" 
-                  :label="t('settings.soft_mutation_rate')" 
-                  :tooltip="t('settings.soft_mutation_rate_tip')" 
-                  step="0.1"
-                />
-              
-                <SettingInput 
-                  v-model="params.additional_options.soft_mutation_attempts" 
-                  :label="t('settings.soft_mutation_attempts')" 
-                  :tooltip="t('settings.soft_mutation_attempts_tip')" 
-                />
-              
-                <SettingInput 
-                  v-model="params.additional_options.heat_stagnant_count" 
-                  :label="t('settings.heat_stagnant_count')" 
-                  :tooltip="t('settings.heat_stagnant_count_tip')" 
-                />
-              
-                <SettingInput 
-                  v-model="params.additional_options.heat_step_scale" 
-                  :label="t('settings.heat_step_scale')" 
-                  :tooltip="t('settings.heat_step_scale_tip')" 
+              <div v-show="expandedSections.advanced" class="space-y-4 pt-2 pb-4">
+                <SettingInput
+                  v-model="params.additional_options.elitism"
+                  :label="t('settings.elitism')"
+                  :tooltip="t('settings.elitism_tip')"
                   step="0.01"
                 />
-              
-                <SettingInput 
-                  v-model="params.additional_options.shock_stagnant_count" 
-                  :label="t('settings.shock_stagnant_count')" 
-                  :tooltip="t('settings.shock_stagnant_count_tip')" 
+
+                <SettingInput
+                  v-model="params.additional_options.tournament_size"
+                  :label="t('settings.tournament')"
+                  :tooltip="t('settings.tournament_tip')"
                 />
-              
-                <SettingInput 
-                  v-model="params.additional_options.shock_mutation_rate" 
-                  :label="t('settings.shock_mutation_rate')" 
-                  :tooltip="t('settings.shock_mutation_rate_tip')" 
-                  step="0.01" 
+
+                <SettingToggle
+                  v-model="params.additional_options.is_soft_mutation_enabled"
+                  :label="t('settings.soft_mutation')"
+                  :tooltip="t('settings.soft_mutation_tip')"
                 />
-              
-                <SettingInput 
-                  v-model="params.additional_options.shock_min_recovery_count" 
-                  :label="t('settings.shock_min_recovery_count')" 
-                  :tooltip="t('settings.shock_min_recovery_count_tip')" 
+
+                <SettingInput
+                  v-model="params.additional_options.soft_mutation_rate"
+                  :label="t('settings.soft_mutation_rate')"
+                  :tooltip="t('settings.soft_mutation_rate_tip')"
+                  step="0.1"
                 />
-              
-                <SettingInput 
-                  v-model="params.additional_options.shock_recovery_scale" 
-                  :label="t('settings.shock_recovery_scale')" 
-                  :tooltip="t('settings.shock_recovery_scale_tip')" 
-                  step="0.01" 
+
+                <SettingInput
+                  v-model="params.additional_options.soft_mutation_attempts"
+                  :label="t('settings.soft_mutation_attempts')"
+                  :tooltip="t('settings.soft_mutation_attempts_tip')"
                 />
-              
+
+                <SettingInput
+                  v-model="params.additional_options.heat_stagnant_count"
+                  :label="t('settings.heat_stagnant_count')"
+                  :tooltip="t('settings.heat_stagnant_count_tip')"
+                />
+
+                <SettingInput
+                  v-model="params.additional_options.heat_step_scale"
+                  :label="t('settings.heat_step_scale')"
+                  :tooltip="t('settings.heat_step_scale_tip')"
+                  step="0.01"
+                />
+
+                <SettingInput
+                  v-model="params.additional_options.shock_stagnant_count"
+                  :label="t('settings.shock_stagnant_count')"
+                  :tooltip="t('settings.shock_stagnant_count_tip')"
+                />
+
+                <SettingInput
+                  v-model="params.additional_options.shock_mutation_rate"
+                  :label="t('settings.shock_mutation_rate')"
+                  :tooltip="t('settings.shock_mutation_rate_tip')"
+                  step="0.01"
+                />
+
+                <SettingInput
+                  v-model="params.additional_options.shock_min_recovery_count"
+                  :label="t('settings.shock_min_recovery_count')"
+                  :tooltip="t('settings.shock_min_recovery_count_tip')"
+                />
+
+                <SettingInput
+                  v-model="params.additional_options.shock_recovery_scale"
+                  :label="t('settings.shock_recovery_scale')"
+                  :tooltip="t('settings.shock_recovery_scale_tip')"
+                  step="0.01"
+                />
+
               </div>
             </div>
 
             <!-- Секция 3: Правила (Заглушка) -->
             <div class="pl-2 border-b border-gray-100 pb-2">
-              <button 
-                @click="expandedSections.rules = !expandedSections.rules" 
+              <button
+                @click="expandedSections.rules = !expandedSections.rules"
                 class="w-full flex justify-between items-center py-3 text-left focus:outline-none group"
               >
                 <span class="text-xs font-bold uppercase tracking-wider transition-colors"
                       :class="expandedSections.rules ? 'text-indigo-600' : 'text-gray-500 group-hover:text-gray-800'">
                   {{ t('settings.rules_title') }}
                 </span>
-                <svg xmlns="http://www.w3.org/2000/svg" 
-                     class="w-4 h-4 text-gray-400 transition-transform duration-300" 
-                     :class="{ 'rotate-180': expandedSections.rules }" 
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="w-4 h-4 text-gray-400 transition-transform duration-300"
+                     :class="{ 'rotate-180': expandedSections.rules }"
                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>

@@ -21,7 +21,7 @@ type EvaluatorConfig struct {
 	PenaltyLectureAfterPractice float64
 
 	// настройки расчета для функции мягких ограничений
-	TanhScaleFactor float64
+	FuncScaleFactor float64
 	SoftScoreWeight float64
 }
 
@@ -39,7 +39,7 @@ var DefaultConfig = EvaluatorConfig{
 
 	PenaltyLectureAfterPractice: -100.0,
 
-	TanhScaleFactor: 0.5,
+	FuncScaleFactor: 0.3,
 	SoftScoreWeight: 0.5,
 }
 

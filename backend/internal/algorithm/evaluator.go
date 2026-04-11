@@ -77,7 +77,7 @@ func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
 	baseFitness := 1.0 / (1.0 + float64(totalHardConflicts))
 
 	// 2. Считаем бонусы с помощью Softsign (от 0 до 1)
-	x := e.Data.Config.TanhScaleFactor * relativeSoftScore
+	x := e.Data.Config.FuncScaleFactor * relativeSoftScore
 	// Softsign функция: x / (1 + |x|)
 	softsign := x / (1.0 + math.Abs(x))
 
