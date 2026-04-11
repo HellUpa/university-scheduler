@@ -47,7 +47,7 @@ func main() {
 			for _, soft := range softMutationFlag {
 				for i := 1; i <= iterations; i++ {
 
-					log.Printf("Running: Pop=%d, Gen=%.2f, Soft=%v, Run=%d", pop, gen, soft, i)
+					log.Printf("Running: Pop=%d, Gen=%d, Soft=%v, Run=%d", pop, gen, soft, i)
 
 					start := time.Now()
 
@@ -67,7 +67,7 @@ func main() {
 					writer.Write([]string{
 						time.Now().Format(time.RFC3339),
 						strconv.Itoa(pop),
-						fmt.Sprintf("%.2f", gen),
+						strconv.Itoa(gen),
 						strconv.FormatBool(soft),
 						strconv.Itoa(i),
 						strconv.FormatInt(duration, 10),

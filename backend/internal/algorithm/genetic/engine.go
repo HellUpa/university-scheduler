@@ -256,7 +256,6 @@ func (eng *GeneticEngine) determineMutationStrategy(
 
 	// ШОКОВАЯ ТЕРАПИЯ
 	if isStagnating && newStagnantGens > eng.ShockStagnantCount {
-		log.Printf("!!! SHOCK THERAPY (Hard search) !!!")
 		return eng.mutate, eng.ShockMutationRate, 0, max(int(float64(eng.Generations)*eng.ShockRecoveryScale), eng.ShockMinRecoveryCount)
 	}
 
