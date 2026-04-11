@@ -19,7 +19,8 @@ type MutationFunc func(*algorithm.Schedule, float64)
 type ProgressFunc func(gen int, fitness float64, mutRate float64)
 
 type GeneticEngine struct {
-	DB *gorm.DB
+	DB       *gorm.DB
+	IsSilent bool
 
 	// Главные параметры
 	PopulationSize   int
@@ -55,6 +56,7 @@ type GeneticEngine struct {
 func NewEngine(db *gorm.DB) *GeneticEngine {
 	return &GeneticEngine{
 		DB:               db,
+		IsSilent:         false,
 		PopulationSize:   100,
 		Generations:      200,
 		BaseMutationRate: 0.001,
@@ -177,9 +179,11 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 		}
 
 		// Логирование прогресса
-		if gen%20 == 0 || gen == eng.Generations-1 {
-			log.Printf("[Gen %3d] Best Penalty: %.1f | Stag: %2d | MutRate: %.3f",
-				gen, bestInd.InternalPenalty, stagnantGenerations, currentMutationRate)
+		if !eng.IsSilent {
+			if gen%20 == 0 || gen == eng.Generations-1 {
+				log.Printf("[Gen %3d] Best Penalty: %.1f | Stag: %2d | MutRate: %.3f",
+					gen, bestInd.InternalPenalty, stagnantGenerations, currentMutationRate)
+			}
 		}
 
 		// 3. Селекция и Скрещивание

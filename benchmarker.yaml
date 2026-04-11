@@ -1,0 +1,48 @@
+services:
+  # ==========================================
+  # 1. API SERVICE (Основной вход)
+  # ==========================================
+  benchmarker:
+    build:
+      context: ./backend
+    container_name: scheduler-benchmarker
+    command: ./benchmarker
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/env/config.yaml:/etc/scheduler/config.yaml
+      - ./benchmarks:/app/benchmarks
+    environment:
+      - CONFIG_PATH=/etc/scheduler
+    networks:
+      - scheduler-network
+
+  # ==========================================
+  # ИНФРАСТРУКТУРА
+  # ==========================================
+  db:
+    image: postgres:17-alpine
+    container_name: scheduler-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ucttp
+    volumes:
+      - scheduler-postgres:/var/lib/postgresql/data
+    networks:
+      - scheduler-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  scheduler-network:
+    driver: bridge
+
+volumes:
+  scheduler-postgres:
