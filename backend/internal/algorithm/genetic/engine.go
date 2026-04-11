@@ -123,7 +123,7 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 		population[i] = eng.createRandomIndividual()
 	}
 
-	bestFitnessOverall := 0.0
+	bestPenaltyOverall := 0.0
 	stagnantGenerations := 0
 	recoveryCounter := 0 // Счетчик поколений восстановления (иммунитет)
 	// =========================================
@@ -149,7 +149,7 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 
 		// 2. Сортировка
 		sort.Slice(population, func(i, j int) bool {
-			return population[i].Fitness > population[j].Fitness
+			return population[i].InternalPenalty < population[j].InternalPenalty
 		})
 
 		bestInd := population[0]
@@ -159,26 +159,27 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 		var currentMutationRate float64
 
 		// Обновляем общий лучший фитнес
-		if bestInd.Fitness > bestFitnessOverall {
-			bestFitnessOverall = bestInd.Fitness
+		if bestInd.InternalPenalty < bestPenaltyOverall {
+			bestPenaltyOverall = bestInd.InternalPenalty
 		}
 
 		mutateToApply, currentMutationRate, stagnantGenerations, recoveryCounter = eng.determineMutationStrategy(
-			bestInd.Fitness,
-			bestFitnessOverall,
+			bestInd.HardConflicts == 0, // проверка на валидность расписания
+			bestInd.InternalPenalty,
+			bestPenaltyOverall,
 			stagnantGenerations,
 			recoveryCounter,
 		)
 		// =====================================
 
 		if onProgress != nil {
-			onProgress(gen, bestInd.Fitness, currentMutationRate)
+			onProgress(gen, bestInd.UserFitness, currentMutationRate)
 		}
 
 		// Логирование прогресса
 		if gen%20 == 0 || gen == eng.Generations-1 {
-			log.Printf("[Gen %3d] Best Fit: %.7f | Stag: %2d | MutRate: %.3f",
-				gen, bestInd.Fitness, stagnantGenerations, currentMutationRate)
+			log.Printf("[Gen %3d] Best Penalty: %.1f | Stag: %2d | MutRate: %.3f",
+				gen, bestInd.InternalPenalty, stagnantGenerations, currentMutationRate)
 		}
 
 		// 3. Селекция и Скрещивание
@@ -209,6 +210,7 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 // 3. newStagnantGens - обновленный счетчик стагнации
 // 4. newRecoveryCounter - обновленный счетчик восстановления
 func (eng *GeneticEngine) determineMutationStrategy(
+	isValid bool,
 	bestFitness float64,
 	bestFitnessOverall float64,
 	stagnantGens int,
@@ -216,9 +218,8 @@ func (eng *GeneticEngine) determineMutationStrategy(
 ) (mutationFn MutationFunc, mutationRate float64, newStagnantGens int, newRecoveryCounter int) {
 
 	// --- Фаза 1: Оптимизация (валидное решение найдено) ---
-	if eng.IsSoftMutationEnabled && bestFitness >= 1.0 {
+	if eng.IsSoftMutationEnabled && isValid {
 		// Мы в режиме улучшения мягких ограничений.
-		// Логика нагрева/шока здесь не нужна, она слишком агрессивна.
 		// Просто используем мягкую мутацию с фиксированным шансом.
 		return eng.softMutate, eng.SoftMutationRate, stagnantGens, recoveryCounter
 	}
@@ -232,7 +233,7 @@ func (eng *GeneticEngine) determineMutationStrategy(
 
 	// Проверяем стагнацию
 	var isStagnating bool
-	if bestFitness > bestFitnessOverall+0.000001 {
+	if bestFitnessOverall > bestFitness {
 		// Прогресс есть! Сбрасываем стагнацию.
 		newStagnantGens = 0
 		isStagnating = false
@@ -433,7 +434,7 @@ func tournamentSelect(population []*algorithm.Schedule, k int) *algorithm.Schedu
 	// Проводим турнир
 	for i := 1; i < k; i++ {
 		contender := population[rand.Intn(len(population))]
-		if contender.Fitness > best.Fitness {
+		if contender.InternalPenalty < best.InternalPenalty {
 			best = contender
 		}
 	}

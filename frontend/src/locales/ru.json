@@ -14,10 +14,15 @@
     "saturday": "Суббота"
   },
   "stats": {
-    "fitness": "Фитнес-оценка",
+    "fitness": "Качество расписания",
+    "conflicts_found": "Количество конфликтов",
     "time": "Время генерации",
     "time_unit": "мс",
-    "algorithm": "Алгоритм"
+    "algorithm": "Алгоритм",
+    "algorithm_type": {
+      "greedy": "Жадный",
+      "genetic": "Генетический"
+    }
   },
   "matrix": {
     "time_slots": "Время",

@@ -47,13 +47,13 @@ type AdditionalOptions struct {
 type RuleOptions struct {
 }
 
-// Структура для приема параметров алгоритма из тела запроса (POST JSON)
+// GenerateRequest Структура для приема параметров алгоритма из тела запроса (POST JSON)
 type GenerateRequest struct {
 	MainOptions       MainOptions       `json:"main_options"`
 	AdditionalOptions AdditionalOptions `json:"additional_options"`
 }
 
-// Структура для красивого ответа
+// ScheduleItemResponse Структура для красивого ответа
 type ScheduleItemResponse struct {
 	Subject    string   `json:"subject"`
 	Instructor string   `json:"instructor"`
@@ -126,12 +126,13 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	result := h.formatScheduleResponse(bestSchedule, engine.Evaluator)
 
 	return c.JSON(fiber.Map{
-		"algorithm":     "Genetic",
-		"status":        "success",
-		"fitness_score": bestSchedule.Fitness,
-		"time_taken_ms": duration.Milliseconds(),
-		"parameters":    req,
-		"schedule":      result,
+		"algorithm":      "Genetic",
+		"status":         "success",
+		"fitness_score":  bestSchedule.UserFitness,
+		"hard_conflicts": bestSchedule.HardConflicts,
+		"time_taken_ms":  duration.Milliseconds(),
+		"parameters":     req,
+		"schedule":       result,
 	})
 }
 
@@ -198,10 +199,11 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 
 	// 4. Шлем финальный результат
 	_ = c.WriteJSON(fiber.Map{
-		"type":          "final",
-		"schedule":      h.formatScheduleResponse(bestSchedule, engine.Evaluator),
-		"fitness":       bestSchedule.Fitness,
-		"time_taken_ms": duration.Milliseconds(),
+		"type":           "final",
+		"schedule":       h.formatScheduleResponse(bestSchedule, engine.Evaluator),
+		"fitness":        bestSchedule.UserFitness,
+		"hard_conflicts": bestSchedule.HardConflicts,
+		"time_taken_ms":  duration.Milliseconds(),
 	})
 }
 
@@ -222,11 +224,12 @@ func (h *Handler) GenerateScheduleGreedy(c *fiber.Ctx) error {
 	result := h.formatScheduleResponse(bestSchedule, engine.Evaluator)
 
 	return c.JSON(fiber.Map{
-		"algorithm":     "Greedy",
-		"status":        "success",
-		"fitness_score": bestSchedule.Fitness,
-		"time_taken_ms": duration.Milliseconds(),
-		"schedule":      result,
+		"algorithm":      "Greedy",
+		"status":         "success",
+		"fitness_score":  bestSchedule.UserFitness,
+		"hard_conflicts": bestSchedule.HardConflicts,
+		"time_taken_ms":  duration.Milliseconds(),
+		"schedule":       result,
 	})
 }
 

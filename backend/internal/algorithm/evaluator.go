@@ -66,30 +66,23 @@ func (e *Evaluator) CountConflicts(schedule *Schedule) (hardConflicts int, softC
 }
 
 // CalculateFitness теперь просто оркестратор
-func (e *Evaluator) CalculateFitness(schedule *Schedule) float64 {
+func (e *Evaluator) CalculateFitness(schedule *Schedule) {
 	totalHardConflicts, totalSoftScore := e.CountConflicts(schedule)
 
+	// Штрафные баллы для ГА, теперь он минимизирует их:
+	schedule.InternalPenalty = (float64(totalHardConflicts) * e.Data.Config.PenaltyHardConstraint) + totalSoftScore
+	schedule.HardConflicts = totalHardConflicts
+
+	// Теперь считаем оценку для UI
 	// Делаем поправку на масштаб
 	scaleFactor := float64(len(schedule.Assignments))
 	relativeSoftScore := totalSoftScore / scaleFactor
 
-	// 1. Математика
-	baseFitness := 1.0 / (1.0 + float64(totalHardConflicts))
+	// Качество расписания 100 %, увеличиваются, с уменьшением штрафов
+	bonusFitness := math.Exp(-e.Data.Config.FuncScaleFactor * relativeSoftScore)
 
-	// 2. Считаем бонусы с помощью Softsign (от 0 до 1)
-	x := e.Data.Config.FuncScaleFactor * relativeSoftScore
-	// Softsign функция: x / (1 + |x|)
-	softsign := x / (1.0 + math.Abs(x))
-
-	// Нормализуем из [-1, 1] в [0, 1]
-	softScoreNormalized := (softsign + 1.0) / 2.0
-
-	// 3. Итоговый фитнес
-	// Теперь вес бонусов - это вес нормализованного значения
-	totalFitness := baseFitness * (1.0 + (softScoreNormalized * e.Data.Config.SoftScoreWeight))
-
-	schedule.Fitness = totalFitness
-	return totalFitness
+	schedule.UserFitness = bonusFitness
+	return
 }
 
 // Вспомогательная функция для сборки расписания по дням

@@ -14,10 +14,15 @@
     "saturday": "Сенбі"
   },
   "stats": {
-    "fitness": "Фитнес-бағалау",
+    "fitness": "Кесте сапасы",
+    "conflicts_found": "Қақтығыстар саны",
     "time": "Генерация уақыты",
     "time_unit": "мс",
-    "algorithm": "Алгоритм"
+    "algorithm": "Алгоритм",
+    "algorithm_type": {
+      "greedy": "Ашкөз",
+      "genetic": "Генетикалық"
+    }
   },
   "matrix": {
     "time_slots": "Уақыт",

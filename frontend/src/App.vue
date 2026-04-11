@@ -48,12 +48,19 @@ const resetParams = () => {
 
 const scrollBarParams = {
   min: 50,
-  max: 600,
+  max: 800,
   step: 10,
 }
+
+const calculateValue = (x: number) => {
+  if (!x) return 0;
+  // Формула: 0.5 * (x в степени 1.4)
+  return Math.round(0.5 * Math.pow(x, 1.4));
+};
+
 // Функция автоматического расчета поколений (в 3 раза больше популяции)
 const updateGenerations = () => {
-    params.value.main_options.generations = params.value.main_options.population_size * 3;
+    params.value.main_options.generations = calculateValue(params.value.main_options.population_size);
 };
 
 const isSettingsOpen = ref(false) // Состояние боковой панели
@@ -67,7 +74,7 @@ const isAdvancedUnlocked = ref(false); // Флаг разблокировки э
 const isGenerating = ref(false)
 const loadingText = ref('Оптимизация расписания...')
 const rawSchedule = ref<ScheduleItem[]>([])
-const stats = reactive({ fitness: 0, time: 0, algo: '', show: false })
+const stats = reactive({ fitness: 0, hard_conflicts: 0, time: 0, algo: '', show: false })
 
 const chartCanvas = ref<HTMLCanvasElement | null>(null)
 const chartInstance = shallowRef<Chart | null>(null)
@@ -94,7 +101,7 @@ const generateGreedy = async () => {
       // body: JSON.stringify(params)
     })
     const data = await response.json()
-    stats.fitness = data.fitness_score; stats.time = data.time_taken_ms; stats.algo = 'Greedy'; stats.show = true
+    stats.fitness = data.fitness_score; stats.hard_conflicts = data.hard_conflicts; stats.time = data.time_taken_ms; stats.algo = t('stats.algorithm_type.greedy'); stats.show = true
     rawSchedule.value = data.schedule
   } catch (e) { alert("Ошибка: " + e) }
   finally { isGenerating.value = false }
@@ -122,7 +129,7 @@ const generateGenetic = () => {
       }
     }
     if (msg.type === 'final') {
-      stats.fitness = msg.fitness; stats.time = msg.time_taken_ms; stats.algo = 'Genetic'; stats.show = true
+      stats.fitness = msg.fitness; stats.hard_conflicts = msg.hard_conflicts; stats.time = msg.time_taken_ms; stats.algo = t('stats.algorithm_type.genetic'); stats.show = true
       rawSchedule.value = msg.schedule; isGenerating.value = false
       socket.close()
     }
@@ -186,10 +193,29 @@ const scheduleMatrix = computed(() => {
 
       <!-- Stats Panel -->
       <div v-if="stats.show" class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
-          <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('stats.fitness') }}</p>
-          <p :class="['text-3xl font-extrabold mt-1', stats.fitness >= 1.0 ? 'text-green-600' : 'text-red-500']">{{ stats.fitness.toFixed(4) }}</p>
-        </div>
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center transition-all">
+            <!-- Состояние: ЕСТЬ КОНФЛИКТЫ -->
+            <template v-if="stats.hard_conflicts > 0">
+              <p class="text-sm font-semibold text-red-500 uppercase tracking-wider">
+                {{ t('stats.conflicts_found') }}
+              </p>
+              <div class="mt-1">
+                <p class="text-3xl font-extrabold text-red-600">
+                  {{ stats.hard_conflicts }}
+                </p>
+              </div>
+            </template>
+
+            <!-- Состояние: ВСЕ ЧИСТО -->
+            <template v-else>
+              <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                {{ t('stats.fitness') }}
+              </p>
+              <p class="text-3xl font-extrabold mt-1 text-green-600">
+                {{ (stats.fitness * 100).toFixed(2) }}%
+              </p>
+            </template>
+          </div>
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
           <p class="text-sm font-semibold text-gray-400 uppercase tracking-wider">{{ t('stats.time') }}</p>
           <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ stats.time }} {{ t('stats.time_unit') }}</p>

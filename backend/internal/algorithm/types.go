@@ -16,8 +16,10 @@ type Assignment struct {
 
 // Schedule - вариант полного расписания
 type Schedule struct {
-	Assignments []*Assignment
-	Fitness     float64
+	Assignments     []*Assignment
+	InternalPenalty float64
+	HardConflicts   int
+	UserFitness     float64
 
 	GroupDailySchedule map[uint]map[domain.DayOfWeek][]int
 }
@@ -26,7 +28,9 @@ type Schedule struct {
 func NewSchedule(assignments []*Assignment) *Schedule {
 	return &Schedule{
 		Assignments:        assignments,
-		Fitness:            0.0,
+		InternalPenalty:    0.0,
+		HardConflicts:      0,
+		UserFitness:        0.0,
 		GroupDailySchedule: make(map[uint]map[domain.DayOfWeek][]int),
 	}
 }

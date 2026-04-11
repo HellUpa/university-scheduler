@@ -14,10 +14,15 @@
     "saturday": "Saturday"
   },
   "stats": {
-    "fitness": "Fitness score",
+    "fitness": "Schedule quality",
+    "conflicts_found": "Conflict count",
     "time": "Generation time",
     "time_unit": "ms",
-    "algorithm": "Algorithm"
+    "algorithm": "Algorithm",
+    "algorithm_type": {
+      "greedy": "Greedy",
+      "genetic": "Genetic"
+    }
   },
   "matrix": {
     "time_slots": "Time",
