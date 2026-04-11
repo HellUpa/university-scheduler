@@ -37,13 +37,15 @@ func main() {
 	})
 
 	// 2. Определяем сетку параметров
+	popSizes := []int{100, 200, 300, 400, 500, 1000}
+	generations := []int{250, 500, 1000, 1500, 2000, 3000}
 	softMutationFlag := []bool{true, false}
-	iterations := 30
+	iterations := 10
 
 	log.Println("Starting benchmarks...")
 
-	for pop := 50; pop < 1000; pop += 25 {
-		for gen := 100; gen < 3000; gen += 100 {
+	for _, pop := range popSizes {
+		for _, gen := range generations {
 			for _, soft := range softMutationFlag {
 				for i := 1; i <= iterations; i++ {
 
