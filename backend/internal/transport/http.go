@@ -30,6 +30,7 @@ type MainOptions struct {
 type AdditionalOptions struct {
 	EliteSize      float64 `json:"elitism"`
 	TournamentSize int     `json:"tournament_size"`
+	CrossoverRate  float64 `json:"crossover_rate"`
 	// Мягкая мутация (без жестких конфликтов)
 	IsSoftMutationEnabled bool    `json:"is_soft_mutation_enabled"`
 	SoftMutationRate      float64 `json:"soft_mutation_rate"`
@@ -77,6 +78,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 		AdditionalOptions: AdditionalOptions{
 			EliteSize:             0.05,
 			TournamentSize:        3,
+			CrossoverRate:         0.8,
 			IsSoftMutationEnabled: false,
 			SoftMutationRate:      0.10,
 			SoftMutationAttempts:  10,
@@ -102,6 +104,7 @@ func (h *Handler) GenerateScheduleGenetic(c *fiber.Ctx) error {
 	engine.BaseMutationRate = req.MainOptions.MutationRate
 	engine.EliteSize = req.AdditionalOptions.EliteSize
 	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.CrossoverRate = req.AdditionalOptions.CrossoverRate
 	engine.IsSoftMutationEnabled = req.AdditionalOptions.IsSoftMutationEnabled
 	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
 	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts
@@ -147,6 +150,7 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 		AdditionalOptions: AdditionalOptions{
 			EliteSize:             0.05,
 			TournamentSize:        3,
+			CrossoverRate:         0.8,
 			IsSoftMutationEnabled: false,
 			SoftMutationRate:      0.10,
 			SoftMutationAttempts:  10,
@@ -171,6 +175,7 @@ func (h *Handler) EvolutionWS(c *websocket.Conn) {
 	engine.BaseMutationRate = req.MainOptions.MutationRate
 	engine.EliteSize = req.AdditionalOptions.EliteSize
 	engine.TournamentSize = req.AdditionalOptions.TournamentSize
+	engine.CrossoverRate = req.AdditionalOptions.CrossoverRate
 	engine.IsSoftMutationEnabled = req.AdditionalOptions.IsSoftMutationEnabled
 	engine.SoftMutationRate = req.AdditionalOptions.SoftMutationRate
 	engine.SoftMutationAttempts = req.AdditionalOptions.SoftMutationAttempts

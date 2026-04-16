@@ -26,6 +26,7 @@ const getDefaultParams = () => ({
   additional_options: {
     elitism: 0.05,
     tournament_size: 3,
+    crossover_rate: 0.8,
     is_soft_mutation_enabled: false,
     soft_mutation_rate: 0.10,
     soft_mutation_attempts: 10,

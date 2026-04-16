@@ -30,6 +30,7 @@ type GeneticEngine struct {
 	// Дополнительные параметры
 	EliteSize      float64
 	TournamentSize int
+	CrossoverRate  float64
 	// Мягкая мутация (без жестких конфликтов)
 	IsSoftMutationEnabled bool
 	SoftMutationRate      float64
@@ -63,6 +64,7 @@ func NewEngine(db *gorm.DB) *GeneticEngine {
 
 		EliteSize:             0.05,
 		TournamentSize:        3,
+		CrossoverRate:         0.8,
 		IsSoftMutationEnabled: false,
 		SoftMutationRate:      0.10,
 		SoftMutationAttempts:  10,
@@ -195,7 +197,7 @@ func (eng *GeneticEngine) Run(onProgress ProgressFunc) (*algorithm.Schedule, err
 			p1 := tournamentSelect(population, eng.TournamentSize) // Турнир размером 3
 			p2 := tournamentSelect(population, eng.TournamentSize)
 
-			child := eng.crossover(p1, p2)
+			child := eng.crossover(p1, p2, eng.CrossoverRate)
 			mutateToApply(child, currentMutationRate)
 			newPop = append(newPop, child)
 		}
@@ -310,28 +312,39 @@ func (eng *GeneticEngine) createRandomIndividual() *algorithm.Schedule {
 	return algorithm.NewSchedule(assignments)
 }
 
-func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule) *algorithm.Schedule {
+func (eng *GeneticEngine) crossover(p1, p2 *algorithm.Schedule, crossoverRate float64) *algorithm.Schedule {
 	childAssigns := make([]*algorithm.Assignment, len(p1.Assignments))
 
-	for i := 0; i < len(p1.Assignments); i++ {
-		var parentAssign *algorithm.Assignment
+	if rand.Float64() < crossoverRate {
+		for i := 0; i < len(p1.Assignments); i++ {
+			var parentAssign *algorithm.Assignment
 
-		// Uniform Crossover: случайно выбираем родителя для каждого гена
+			// Uniform Crossover: случайно выбираем родителя для каждого гена
+			if rand.Float64() < 0.5 {
+				parentAssign = p1.Assignments[i]
+			} else {
+				parentAssign = p2.Assignments[i]
+			}
+
+			childAssigns[i] = &algorithm.Assignment{
+				ClassID:       parentAssign.ClassID,
+				RoomID:        parentAssign.RoomID,
+				SlotID:        parentAssign.SlotID,
+				InstructorID:  parentAssign.InstructorID,
+				GroupIDs:      append([]uint(nil), parentAssign.GroupIDs...),
+				StudentsCount: parentAssign.StudentsCount,
+			}
+		}
+	} else {
+		var parent *algorithm.Schedule
 		if rand.Float64() < 0.5 {
-			parentAssign = p1.Assignments[i]
+			parent = p1
 		} else {
-			parentAssign = p2.Assignments[i]
+			parent = p2
 		}
-
-		childAssigns[i] = &algorithm.Assignment{
-			ClassID:       parentAssign.ClassID,
-			RoomID:        parentAssign.RoomID,
-			SlotID:        parentAssign.SlotID,
-			InstructorID:  parentAssign.InstructorID,
-			GroupIDs:      append([]uint(nil), parentAssign.GroupIDs...),
-			StudentsCount: parentAssign.StudentsCount,
-		}
+		return parent
 	}
+
 	return algorithm.NewSchedule(childAssigns)
 }
 
